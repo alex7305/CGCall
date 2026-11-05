@@ -82,12 +82,12 @@ void copyMessage(QStringView const string, char *const array,
 
 } // namespace
 
-void UI_Constructor::checkStartupWarnings() {
-    if (m_config.check_for_updates()) {
-        checkVersion(false);
-    }
-    ensureCallsignSet(false);
-}
+//void UI_Constructor::checkStartupWarnings() {
+    //if (m_config.check_for_updates()) {
+    //    checkVersion(false);
+    //}
+    //ensureCallsignSet(false);
+//}
 
 void UI_Constructor::initialize_fonts() {
     set_application_font(m_config.text_font());
