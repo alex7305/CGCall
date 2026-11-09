@@ -5,6 +5,8 @@
  * (C) 2025 Allan Bazinet <w6baz@arrl.net> - All Rights Reserved
  */
 
+#include <filesystem>
+#include <random>
 #include <fstream>
 #include "JS8.h"
 #include "JS8_Include/commons.h"
@@ -206,6 +208,7 @@ constexpr int NP = 3200;
 constexpr int NP2 = 2812;
 constexpr float TAU = 2.0f * std::numbers::pi_v<float>;
 constexpr auto ZERO = std::complex<float>{0.0f, 0.0f};
+thread_local bool g_onDecoderThread = false;
 // Key for the constants that follow:
 // Key for the constants that follow:
 //
@@ -1022,24 +1025,6 @@ BPResult bpdecode174(std::array<float, N> const &llr,
     // Callers needing the closest word use `result.bestCw` instead.
     return result;
 }
-// Replay the most recently captured 174-bit LDPC codeword.
-void replayCapturedCodeword()
-{
-    const std::string inputPath =
-        "C:\\HF_Logs\\js8_encoded.bin";
-
-    const std::string outputPath =
-        "C:\\HF_Logs\\js8_replay_result.txt";
-
-    std::array<std::uint8_t, 22> bytes{};
-
-    std::ifstream input(inputPath, std::ios::binary);
-
-    std::ofstream output(outputPath);
-
-    if (!input || !output) {
-        return;
-    }
 
     // Move to the last 22-byte codeword in the file.
     input.seekg(0, std::ios::end);
@@ -4129,6 +4114,7 @@ class Worker : public QObject {
     // is released, until it's informed that it should quit.
 
     void run() {
+    g_onDecoderThread = true;
         // Our thread has started, and we're now running on it, so
         // we're good to now allocate our implementation; we didn't
         // want that to happen on the main thread, as the FFT plans
@@ -4201,6 +4187,116 @@ void JS8::Decoder::nextDecodeReady(
 /******************************************************************************/
 // Public Interface - Encoding
 /******************************************************************************/
+
+namespace {
+constexpr char const *CAPTURE_DIR = "C:\\HF_Logs";
+constexpr char const *CAPTURE_BIN = "C:\\HF_Logs\\js8_encoded.bin";
+constexpr char const *REPLAY_TXT  = "C:\\HF_Logs\\js8_replay_result.txt";
+constexpr char const *REPLAY_WAV  = "C:\\HF_Logs\\js8_replay.wav";
+
+// 174 captured bits -> 79 tones -> 12 kHz mono 16-bit WAV (submode A only).
+bool writeReplayWav(std::array<std::uint8_t, 22> const &bytes,
+                    char const *path, double const audioHz = 1500.0) {
+    auto const bitAt = [&](int i) { return (bytes[i / 8] >> (7 - (i % 8))) & 1; };
+
+    std::array<int, NN> tones{};
+    auto const costas = JS8::Costas::array(JS8::Costas::Type::ORIGINAL);
+    for (int b = 0; b < 3; ++b)
+        for (int c = 0; c < 7; ++c)
+            tones[b * 36 + c] = costas[b][c];
+
+    // Same layout encode() captured: 87 parity bits, then 87 message bits,
+    // 3 bits per tone, MSB first.
+    for (int s = 0; s < 29; ++s) {
+        int p = 0, m = 0;
+        for (int k = 0; k < 3; ++k) {
+            p = (p << 1) | bitAt(s * 3 + k);
+            m = (m << 1) | bitAt(87 + s * 3 + k);
+        }
+        tones[7 + s] = p;
+        tones[43 + s] = m;
+    }
+
+    constexpr int rate = 12000;
+    constexpr int total = ModeA::NMAX;                       // 15 s
+    constexpr int start = static_cast<int>(ModeA::ASTART * rate);
+    constexpr double twoPi = 2.0 * std::numbers::pi;
+
+    std::mt19937 rng(12345);
+    std::normal_distribution<float> noise(0.0f, 0.02f);
+    std::vector<float> audio(total);
+    for (auto &x : audio) x = noise(rng);
+
+    double phase = 0.0;
+    int n = start;
+    for (int s = 0; s < NN; ++s) {
+        double const f = audioHz + tones[s] * (double(rate) / ModeA::NSPS);
+        double const dphi = twoPi * f / rate;
+        for (int k = 0; k < ModeA::NSPS && n < total; ++k, ++n) {
+            audio[n] += 0.2f * static_cast<float>(std::sin(phase));
+            phase = std::fmod(phase + dphi, twoPi);
+        }
+    }
+
+    std::ofstream out(path, std::ios::binary);
+    if (!out) return false;
+    auto const put32 = [&](std::uint32_t v) { out.write(reinterpret_cast<char const *>(&v), 4); };
+    auto const put16 = [&](std::uint16_t v) { out.write(reinterpret_cast<char const *>(&v), 2); };
+    std::uint32_t const dataBytes = total * 2;
+    out.write("RIFF", 4); put32(36 + dataBytes); out.write("WAVEfmt ", 8);
+    put32(16); put16(1); put16(1); put32(rate); put32(rate * 2); put16(2); put16(16);
+    out.write("data", 4); put32(dataBytes);
+    for (float x : audio) {
+        auto const v = static_cast<std::int16_t>(
+            std::clamp(x, -1.0f, 1.0f) * 32767.0f);
+        out.write(reinterpret_cast<char const *>(&v), 2);
+    }
+    return true;
+}
+
+void replayCapturedCodeword() {
+    std::error_code ec;
+    std::filesystem::create_directories(CAPTURE_DIR, ec);
+
+    std::array<std::uint8_t, 22> bytes{};
+    std::ifstream in(CAPTURE_BIN, std::ios::binary);
+    std::ofstream report(REPLAY_TXT);
+    if (!in || !report) return;
+
+    in.seekg(0, std::ios::end);
+    if (in.tellg() < static_cast<std::streamoff>(bytes.size())) {
+        report << "ERROR: capture file too small\n";
+        return;
+    }
+    in.seekg(-static_cast<std::streamoff>(bytes.size()), std::ios::end);
+    in.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
+    if (!in) { report << "ERROR: read failed\n"; return; }
+
+    // 1. Codeword-level check (LDPC + CRC + text), as before but complete.
+    std::array<float, N> llr{};
+    for (int i = 0; i < N; ++i)
+        llr[i] = ((bytes[i / 8] >> (7 - (i % 8))) & 1) ? 8.0f : -8.0f;
+
+    std::array<int8_t, K> decoded{};
+    std::array<int8_t, N> cw{};
+    BPResult bp = bpdecode174(llr, decoded, cw);
+
+    bool const ok = bp.hardErrors >= 0 && checkCRC12(decoded);
+    report << "LDPC hard errors: " << bp.hardErrors
+           << "  iterations: " << bp.iterations << "\n"
+           << "CRC12: " << (ok ? "OK" : "FAIL") << "\n";
+    if (ok) {
+        int const i3 = (decoded[72] << 2) | (decoded[73] << 1) | decoded[74];
+        report << "Frame type: " << i3 << "\n"
+               << "Message: " << extractmessage174(decoded) << "\n";
+    }
+
+    // 2. Full receive-path replay: audio for CGCall to decode.
+    report << "WAV: " << (writeReplayWav(bytes, REPLAY_WAV) ? REPLAY_WAV : "FAILED")
+           << "\n";
+}
+} // namespace
+
 
 namespace JS8 {
 // Port of the Fortran `genjs8` subroutine; from the 12 bytes of `message`,
@@ -4343,6 +4439,7 @@ void encode(int const type, Costas::Array const &costas,
         }
     }
 // Capture the 174-bit LDPC codeword.
+if (!g_onDecoderThread) {
 std::array<std::uint8_t, 22> capturedBits{};
 
 std::size_t bitIndex = 0;
@@ -4381,9 +4478,9 @@ if (capture) {
         capturedBits.size()
     );
 }
-
 capture.close();
-replayCapturedCodeword();
+    replayCapturedCodeword();
+}
 }
 } // namespace JS8
 
