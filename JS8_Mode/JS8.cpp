@@ -5,6 +5,7 @@
  * (C) 2025 Allan Bazinet <w6baz@arrl.net> - All Rights Reserved
  */
 
+#include <fstream>
 #include "JS8.h"
 #include "JS8_Include/commons.h"
 #include "JS8_Mode/FrequencyTracker.h"
