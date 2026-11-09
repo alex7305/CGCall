@@ -4381,11 +4381,10 @@ if (capture) {
         capturedBits.size()
     );
 }
-}
 
 capture.close();
 replayCapturedCodeword();
-
+}
 } // namespace JS8
 
 /******************************************************************************/
