@@ -4270,6 +4270,45 @@ void encode(int const type, Costas::Array const &costas,
             outputBits = 0;
         }
     }
+// Capture the 174-bit LDPC codeword.
+std::array<std::uint8_t, 22> capturedBits{};
+
+std::size_t bitIndex = 0;
+
+// First 87 bits: parity data.
+for (int i = 7; i < 36; ++i) {
+    for (int bit = 2; bit >= 0; --bit) {
+        if (tones[i] & (1 << bit)) {
+            capturedBits[bitIndex / 8] |=
+                (1 << (7 - (bitIndex % 8)));
+        }
+        ++bitIndex;
+    }
+}
+
+// Next 87 bits: original information data.
+for (int i = 43; i < 72; ++i) {
+    for (int bit = 2; bit >= 0; --bit) {
+        if (tones[i] & (1 << bit)) {
+            capturedBits[bitIndex / 8] |=
+                (1 << (7 - (bitIndex % 8)));
+        }
+        ++bitIndex;
+    }
+}
+
+// Append the codeword to a binary file.
+std::ofstream capture(
+    "C:\\HF_Logs\\js8_encoded.bin",
+    std::ios::binary | std::ios::app
+);
+
+if (capture) {
+    capture.write(
+        reinterpret_cast<const char*>(capturedBits.data()),
+        capturedBits.size()
+    );
+}
 }
 } // namespace JS8
 
