@@ -4382,6 +4382,10 @@ if (capture) {
     );
 }
 }
+
+capture.close();
+replayCapturedCodeword();
+
 } // namespace JS8
 
 /******************************************************************************/
