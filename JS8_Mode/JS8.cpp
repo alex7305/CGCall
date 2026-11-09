@@ -1026,59 +1026,6 @@ BPResult bpdecode174(std::array<float, N> const &llr,
     return result;
 }
 
-    // Move to the last 22-byte codeword in the file.
-    input.seekg(0, std::ios::end);
-
-    if (input.tellg() < static_cast<std::streamoff>(bytes.size())) {
-        output << "ERROR: Capture file is too small.\n";
-        return;
-    }
-
-    input.seekg(-static_cast<std::streamoff>(bytes.size()),
-                std::ios::end);
-
-    input.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-
-    if (!input) {
-        output << "ERROR: Could not read captured codeword.\n";
-        return;
-    }
-
-    // Convert the 174 captured bits into decoder LLR values.
-    std::array<float, N> llr{};
-
-    for (int i = 0; i < N; ++i) {
-        int bit = (bytes[i / 8] >> (7 - (i % 8))) & 1;
-
-        // Positive LLR = bit 1; negative LLR = bit 0.
-        llr[i] = bit ? 8.0f : -8.0f;
-    }
-
-    // Run the actual JS8 LDPC decoder.
-    std::array<int8_t, K> decoded{};
-    std::array<int8_t, N> cw{};
-
-    BPOptions options;
-
-    BPResult result = bpdecode174(
-        llr, decoded, cw, options
-    );
-
-    // Save the decoder results.
-    output << "LDPC REPLAY RESULTS\n";
-    output << "Hard errors: " << result.hardErrors << "\n";
-    output << "Iterations: " << result.iterations << "\n";
-    output << "Final failed checks: " << result.finalChecks << "\n";
-    output << "Best failed checks: " << result.bestChecks << "\n";
-
-    output << "\nDecoded 87 information bits:\n";
-
-    for (int i = 0; i < K; ++i) {
-        output << static_cast<int>(decoded[i]);
-    }
-
-    output << "\n";
-}
 } // namespace
 
 /******************************************************************************/
