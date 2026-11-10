@@ -3,6 +3,8 @@
  * @brief Implementation of the MessageTimeStamper class
  */
 
+#include <QFile>
+#include <QCoreApplication>
 #include "DriftingDateTime.h"
 #include "FrequencyList.h"
 #include "JS8MessageBox.h"
