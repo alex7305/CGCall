@@ -115,14 +115,11 @@ class DecodedText {
 
     bool tryUnpackFastData(QString const &);
     bool tryUnpackData(QString const &);
-    bool tryUnpackHeartbeat(QString const &);
-    bool tryUnpackCompound(QString const &);
-    bool tryUnpackDirected(QString const &);
+    bool tryUnpackOps(QString const &);
 
     static constexpr std::array unpackStrategies = {
         &DecodedText::tryUnpackFastData, &DecodedText::tryUnpackData,
-        &DecodedText::tryUnpackHeartbeat, &DecodedText::tryUnpackCompound,
-        &DecodedText::tryUnpackDirected};
+        &DecodedText::tryUnpackOps};
 
     // Core constructor called by public constructors.
     DecodedText(QString const &frame, int bits, int submode,
