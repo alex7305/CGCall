@@ -92,6 +92,22 @@ int main(int argc, char *argv[]) {
         // Apply platform-specific styles from styles.h
         a.setStyleSheet(buttonStyle());
 
+              // CGCall: start the companion feed next to the exe, stop it when the app quits
+        {
+            static QProcess feed;
+            const QString dir = QCoreApplication::applicationDirPath();
+            const QString feedExe = dir + "/cgcall_feed.exe";
+            if (QFile::exists(feedExe)) {
+                feed.setProgram(feedExe);
+                feed.setWorkingDirectory(dir);
+                feed.start();
+                QObject::connect(&a, &QCoreApplication::aboutToQuit, [] {
+                    feed.kill();
+                    feed.waitForFinished(1000);
+                });
+            }
+        }
+      
         QCommandLineParser parser;
         parser.setApplicationDescription("\n" PROJECT_SUMMARY_DESCRIPTION);
         auto help_option = parser.addHelpOption();
