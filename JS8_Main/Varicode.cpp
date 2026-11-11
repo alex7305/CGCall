@@ -1386,7 +1386,50 @@ bool Varicode::unpackOpsFrame(QString const &text, quint32 *id,
     if (text.length() < 12 || text.contains(" ")) {
         return false;
     }
+    
+namespace {
+QRegularExpression const &opsRe() {
+    static QRegularExpression const re(
+        R"(^\s*OPS\s+(\d{1,5})\s+(\d{1,2})\s+(\d{1,2}(?:\.\d)?)\s*([NS])\s+(\d{1,3})\s+(\d{1,2}(?:\.\d)?)\s*([EW])\s+(\d{1,3}|-+)\s+(\d{1,2})\s*$)",
+        QRegularExpression::CaseInsensitiveOption);
+    return re;
+}
+} // namespace
 
+bool Varicode::isOpsText(QString const &text) {
+    static QRegularExpression const re(
+        R"(^\s*OPS(\s|$))", QRegularExpression::CaseInsensitiveOption);
+    return re.match(text).hasMatch();
+}
+
+QString Varicode::packOpsText(QString const &text) {
+    auto const m = opsRe().match(text);
+    if (!m.hasMatch()) {
+        return QString{};
+    }
+
+    quint32 const id = m.captured(1).toUInt();
+    int const latDeg = m.captured(2).toInt();
+    double const latMin = m.captured(3).toDouble();
+    int const lonDeg = m.captured(5).toInt();
+    double const lonMin = m.captured(6).toDouble();
+    bool const crsKnown = m.captured(8).at(0).isDigit();
+    int const course = crsKnown ? m.captured(8).toInt() : -1;
+    int const speed = m.captured(9).toInt();
+
+    // reject, rather than clamp, anything out of range
+    if (latDeg > 90 || latMin >= 60.0 || lonDeg > 180 || lonMin >= 60.0 ||
+        (crsKnown && course > 359) || speed > 63) {
+        return QString{};
+    }
+
+    bool const south = m.captured(4).toUpper() == "S";
+    bool const west = m.captured(7).toUpper() == "W";
+
+    return Varicode::packOpsFrame(id, Varicode::dmmToTenths(latDeg, latMin, south),
+                                  Varicode::dmmToTenths(lonDeg, lonMin, west),
+                                  course, speed);
+}
     quint8 rem = 0;
     auto const bits =
         Varicode::intToBits(Varicode::unpack72bits(text, &rem), 64) +
@@ -1690,6 +1733,16 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
     QStringList lines = {text};
 
     foreach (QString line, lines) {
+        // OPS template: "OPS <id> <deg> <min> N|S <deg> <min> E|W <crs> <spd>"
+        if (Varicode::isOpsText(line)) {
+            QString const opsFrame = Varicode::packOpsText(line);
+            if (!opsFrame.isEmpty()) {
+                allFrames.append({opsFrame, Varicode::JS8Call |
+                                                Varicode::JS8CallFirst |
+                                                Varicode::JS8CallLast});
+            }
+            continue; // invalid OPS text sends nothing
+        }
         QList<QPair<QString, int>> lineFrames;
 
         if (forceData) {
