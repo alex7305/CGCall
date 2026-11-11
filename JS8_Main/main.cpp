@@ -102,8 +102,11 @@ int main(int argc, char *argv[]) {
                 feed.setWorkingDirectory(dir);
                 feed.start();
                 QObject::connect(&a, &QCoreApplication::aboutToQuit, [] {
-                    feed.kill();
-                    feed.waitForFinished(1000);
+                    if (feed.state() != QProcess::NotRunning) {
+                        QProcess::execute("taskkill",
+                            {"/PID", QString::number(feed.processId()), "/T", "/F"});
+                        feed.waitForFinished(1000);
+                    }
                 });
             }
         }
