@@ -168,12 +168,15 @@ class Varicode {
     // OPS: [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
     // lat/lon: signed tenths of an arc-minute (N/E +, S/W -)
     //   |lat| <= 54000 (90 deg), |lon| <= 108000 (180 deg)
+    static bool isOpsText(QString const &text);
+    static QString packOpsText(QString const &text);
     static QString packOpsFrame(quint32 id, int latTenths, int lonTenths,
                                 int course, int speed);
     static bool unpackOpsFrame(QString const &text, quint32 *id,
                                int *latTenths, int *lonTenths, int *course,
                                int *speed);
     static int dmmToTenths(int degrees, double minutes, bool negative);
+    
 
 
 
