@@ -1349,409 +1349,73 @@ bool Varicode::isGroupAllowed(const QString &group) {
     return !disallowed.contains(group);
 }
 
-// CQCQCQ EM73
-// CQ DX EM73
-// CQ QRP EM73
-// HB EM73
-QString Varicode::packHeartbeatMessage(QString const &text,
-                                       const QString &callsign, int *n) {
-    QString frame;
-
-    auto parsedText = heartbeat_re.match(text);
-    if (!parsedText.hasMatch()) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    auto extra = parsedText.captured("grid");
-
-    // Heartbeat Alt Type
-    // ---------------
-    // 1      0   HB
-    // 1      1   CQ
-
-    auto type = parsedText.captured("type");
-    auto isAlt = type.startsWith("CQ");
-
-    if (callsign.isEmpty()) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    quint16 packed_extra = nmaxgrid; // which will display an empty string
-    if (extra.length() == 4 &&
-        QRegularExpression(grid_pattern).match(extra).hasMatch()) {
-        packed_extra = Varicode::packGrid(extra);
-    }
-
-    quint8 cqNumber = hbs.key(type, 0);
-
-    if (isAlt) {
-        packed_extra |= (1 << 15);
-        cqNumber = cqs.key(type, 0);
-    }
-
-    frame = packCompoundFrame(callsign, Varicode::FrameHeartbeat, packed_extra,
-                              cqNumber);
-    if (frame.isEmpty()) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    if (n)
-        *n = parsedText.captured(0).length();
-    return frame;
+int Varicode::dmmToTenths(int degrees, double minutes, bool negative) {
+    int const t = degrees * 600 + qRound(minutes * 10.0);
+    return negative ? -t : t;
 }
 
-QStringList Varicode::unpackHeartbeatMessage(const QString &text, quint8 *pType,
-                                             bool *isAlt, quint8 *pBits3) {
-    quint8 type = Varicode::FrameHeartbeat;
-    quint16 num = nmaxgrid;
-    quint8 bits3 = 0;
+QString Varicode::packOpsFrame(quint32 id, int latTenths, int lonTenths,
+                               int course, int speed) {
+    quint32 const latMag = qAbs(latTenths);
+    quint32 const lonMag = qAbs(lonTenths);
 
-    QStringList unpacked = unpackCompoundFrame(text, &type, &num, &bits3);
-    if (unpacked.isEmpty() || type != Varicode::FrameHeartbeat) {
-        return QStringList{};
+    if (id > 99999 || latMag > 54000 || lonMag > 108000) {
+        return QString{};
     }
 
-    unpacked.append(Varicode::unpackGrid(num & ((1 << 15) - 1)));
+    quint32 const latField = ((quint32)(latTenths < 0) << 17) | latMag;
+    quint32 const lonField = ((quint32)(lonTenths < 0) << 18) | lonMag;
+    quint32 const pcourse = (course >= 0 && course <= 359) ? course : 511;
+    quint32 const pspeed = qBound(0, speed, 63);
 
-    if (isAlt)
-        *isAlt = (num & (1 << 15));
-    if (pType)
-        *pType = type;
-    if (pBits3)
-        *pBits3 = bits3;
+    auto const bits = Varicode::intToBits(Varicode::FrameOps, 3) +
+                      Varicode::intToBits(id, 17) +
+                      Varicode::intToBits(latField, 18) +
+                      Varicode::intToBits(lonField, 19) +
+                      Varicode::intToBits(pcourse, 9) +
+                      Varicode::intToBits(pspeed, 6);
 
-    return unpacked;
+    quint64 const value = Varicode::bitsToInt(bits.constBegin(), 64);
+    quint8 const rem = (quint8)Varicode::bitsToInt(bits.constBegin() + 64, 8);
+    return Varicode::pack72bits(value, rem);
 }
 
-// KN4CRD/XXXX EM73
-// XXXX/KN4CRD EM73
-// KN4CRD/P
-QString Varicode::packCompoundMessage(QString const &text, int *n) {
-    QString frame;
-
-    qCDebug(varicode_js8) << "trying to pack compound message" << text;
-    auto parsedText = compound_re.match(text);
-    if (!parsedText.hasMatch()) {
-        qCDebug(varicode_js8) << "no match for compound message" << text;
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    qCDebug(varicode_js8) << parsedText.capturedTexts();
-
-    QString callsign = parsedText.captured("callsign");
-    QString grid = parsedText.captured("grid");
-    QString cmd = parsedText.captured("cmd");
-    QString num = parsedText.captured("num").trimmed();
-
-    if (callsign.isEmpty()) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    quint8 type = Varicode::FrameCompound;
-    quint16 extra = nmaxgrid;
-
-    qCDebug(varicode_js8) << "try pack cmd" << cmd
-                          << directed_cmds.contains(cmd)
-                          << Varicode::isCommandAllowed(cmd);
-
-    if (!cmd.isEmpty() && directed_cmds.contains(cmd) &&
-        Varicode::isCommandAllowed(cmd)) {
-        bool packedNum = false;
-        quint8 inum = Varicode::packNum(num, nullptr);
-        extra =
-            nusergrid + Varicode::packCmd(directed_cmds[cmd], inum, &packedNum);
-
-        type = Varicode::FrameCompoundDirected;
-    } else if (!grid.isEmpty()) {
-        extra = Varicode::packGrid(grid);
-    }
-
-    frame = Varicode::packCompoundFrame(callsign, type, extra, 0);
-
-    if (n)
-        *n = parsedText.captured(0).length();
-    return frame;
-}
-
-QStringList Varicode::unpackCompoundMessage(const QString &text, quint8 *pType,
-                                            quint8 *pBits3) {
-    quint8 type = Varicode::FrameCompound;
-    quint16 extra = nmaxgrid;
-    quint8 bits3 = 0;
-
-    QStringList unpacked = unpackCompoundFrame(text, &type, &extra, &bits3);
-    if (unpacked.isEmpty() || (type != Varicode::FrameCompound &&
-                               type != Varicode::FrameCompoundDirected)) {
-        return QStringList{};
-    }
-
-    if (extra <= nbasegrid) {
-        unpacked.append(" " + Varicode::unpackGrid(extra));
-    } else if (nusergrid <= extra && extra < nmaxgrid) {
-        // if this is a grid that is higer than the usergrid reference, treat
-        // this as an SNR command
-        quint8 num = 0;
-        auto cmd = Varicode::unpackCmd(extra - nusergrid, &num);
-        auto cmdStr = directed_cmds.key(cmd);
-
-        unpacked.append(cmdStr);
-
-        if (Varicode::isSNRCommand(cmdStr)) {
-            unpacked.append(Varicode::formatSNR(num - 31));
-        }
-    }
-
-    if (pType)
-        *pType = type;
-    if (pBits3)
-        *pBits3 = bits3;
-
-    return unpacked;
-}
-
-QString Varicode::packCompoundFrame(const QString &callsign, quint8 type,
-                                    quint16 num, quint8 bits3) {
-    QString frame;
-
-    // needs to be a compound type...
-    if (type == Varicode::FrameData || type == Varicode::FrameDirected) {
-        return frame;
-    }
-
-    quint8 packed_flag = type;
-    quint64 packed_callsign = Varicode::packAlphaNumeric50(callsign);
-    if (packed_callsign == 0) {
-        return frame;
-    }
-
-    quint16 mask11 = ((1 << 11) - 1) << 5;
-    quint8 mask5 = (1 << 5) - 1;
-
-    quint16 packed_11 = (num & mask11) >> 5;
-    quint8 packed_5 = num & mask5;
-    quint8 packed_8 = (packed_5 << 3) | bits3;
-
-    // [3][50][11],[5][3] = 72
-    auto bits = (Varicode::intToBits(packed_flag, 3) +
-                 Varicode::intToBits(packed_callsign, 50) +
-                 Varicode::intToBits(packed_11, 11));
-
-    return Varicode::pack72bits(Varicode::bitsToInt(bits), packed_8);
-}
-
-QStringList Varicode::unpackCompoundFrame(const QString &text, quint8 *pType,
-                                          quint16 *pNum, quint8 *pBits3) {
-    QStringList unpacked;
-
+bool Varicode::unpackOpsFrame(QString const &text, quint32 *id,
+                              int *latTenths, int *lonTenths, int *course,
+                              int *speed) {
     if (text.length() < 12 || text.contains(" ")) {
-        return unpacked;
+        return false;
     }
 
-    // [3][50][11],[5][3] = 72
-    quint8 packed_8 = 0;
-    auto bits =
-        Varicode::intToBits(Varicode::unpack72bits(text, &packed_8), 64);
+    quint8 rem = 0;
+    auto const bits =
+        Varicode::intToBits(Varicode::unpack72bits(text, &rem), 64) +
+        Varicode::intToBits(rem, 8);
 
-    quint8 packed_5 = packed_8 >> 3;
-    quint8 packed_3 = packed_8 & ((1 << 3) - 1);
-
-    quint8 packed_flag = Varicode::bitsToInt(bits.mid(0, 3));
-
-    // needs to be a ping type...
-    if (packed_flag == Varicode::FrameData ||
-        packed_flag == Varicode::FrameDirected) {
-        return unpacked;
+    if (Varicode::bitsToInt(bits.mid(0, 3)) != Varicode::FrameOps) {
+        return false;
     }
 
-    quint64 packed_callsign = Varicode::bitsToInt(bits.mid(3, 50));
-    quint16 packed_11 = Varicode::bitsToInt(bits.mid(53, 11));
+    quint32 const pid = Varicode::bitsToInt(bits.mid(3, 17));
+    quint32 const latField = Varicode::bitsToInt(bits.mid(20, 18));
+    quint32 const lonField = Varicode::bitsToInt(bits.mid(38, 19));
+    quint32 const pcourse = Varicode::bitsToInt(bits.mid(57, 9));
+    quint32 const pspeed = Varicode::bitsToInt(bits.mid(66, 6));
 
-    QString callsign = Varicode::unpackAlphaNumeric50(packed_callsign);
+    quint32 const latMag = latField & 0x1FFFF;
+    quint32 const lonMag = lonField & 0x3FFFF;
 
-    quint16 num = (packed_11 << 5) | packed_5;
-
-    if (pType)
-        *pType = packed_flag;
-    if (pNum)
-        *pNum = num;
-    if (pBits3)
-        *pBits3 = packed_3;
-
-    unpacked.append(callsign);
-    unpacked.append("");
-
-    return unpacked;
-}
-
-// J1Y ACK
-// J1Y?
-// KN4CRD: J1Y$
-// KN4CRD: J1Y! HELLO WORLD
-QString Varicode::packDirectedMessage(const QString &text,
-                                      const QString &mycall, QString *pTo,
-                                      bool *pToCompound, QString *pCmd,
-                                      QString *pNum, int *n) {
-    QString frame;
-
-    auto match = directed_re.match(text);
-    if (!match.hasMatch()) {
-        if (n)
-            *n = 0;
-        return frame;
+    if (pid > 99999 || latMag > 54000 || lonMag > 108000) {
+        return false; // out-of-range: reject
     }
 
-    QString from = mycall;
-    bool isFromCompound = Varicode::isCompoundCallsign(from);
-    if (isFromCompound) {
-        from = "<....>";
-    }
-    QString to = match.captured("callsign");
-    QString cmd = match.captured("cmd");
-    QString num = match.captured("num");
+    if (id)         *id = pid;
+    if (latTenths)  *latTenths = (latField >> 17) ? -(int)latMag : (int)latMag;
+    if (lonTenths)  *lonTenths = (lonField >> 18) ? -(int)lonMag : (int)lonMag;
+    if (course)     *course = (pcourse <= 359) ? (int)pcourse : -1; // -1 = unknown
+    if (speed)      *speed = (int)pspeed;
 
-    // ensure we have a directed command
-    if (cmd.isEmpty()) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    // ensure we have a valid callsign
-    bool isToCompound = false;
-    bool validToCallsign =
-        (to != mycall) && Varicode::isValidCallsign(to, &isToCompound);
-    if (!validToCallsign) {
-        qCDebug(varicode_js8) << "to" << to << "is not a valid callsign";
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    // return back the parsed "to" field
-    if (pTo)
-        *pTo = to;
-    if (pToCompound)
-        *pToCompound = isToCompound;
-
-    // then replace the current processing with a placeholder that we _can_ pack
-    // into a directed command, because later we'll send the "to" field in a
-    // compound frame using the results of this directed pack
-    if (isToCompound) {
-        to = "<....>";
-    }
-
-    qCDebug(varicode_js8) << "directed" << validToCallsign << isToCompound
-                          << to;
-
-    // validate command
-    if (!Varicode::isCommandAllowed(cmd) &&
-        !Varicode::isCommandAllowed(cmd.trimmed())) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    // packing general number...
-    bool numOK = false;
-    quint8 inum = Varicode::packNum(num.trimmed(), &numOK);
-    if (numOK) {
-        if (pNum)
-            *pNum = num;
-    }
-
-    bool portable_from = false;
-    quint32 packed_from = Varicode::packCallsign(from, &portable_from);
-
-    bool portable_to = false;
-    quint32 packed_to = Varicode::packCallsign(to, &portable_to);
-
-    if (packed_from == 0 || packed_to == 0) {
-        if (n)
-            *n = 0;
-        return frame;
-    }
-
-    QString cmdOut;
-    quint8 packed_cmd = 0;
-    if (directed_cmds.contains(cmd)) {
-        cmdOut = cmd;
-        packed_cmd = directed_cmds[cmdOut];
-    }
-    if (directed_cmds.contains(cmd.trimmed())) {
-        cmdOut = cmd.trimmed();
-        packed_cmd = directed_cmds[cmdOut];
-    }
-    quint8 packed_flag = Varicode::FrameDirected;
-    quint8 packed_extra =
-        ((((int)portable_from) << 7) + (((int)portable_to) << 6) + inum);
-
-    // [3][28][28][5],[2][6] = 72
-    auto bits = (Varicode::intToBits(packed_flag, 3) +
-                 Varicode::intToBits(packed_from, 28) +
-                 Varicode::intToBits(packed_to, 28) +
-                 Varicode::intToBits(packed_cmd % 32, 5));
-
-    if (pCmd)
-        *pCmd = cmdOut;
-    if (n)
-        *n = match.captured(0).length();
-    return Varicode::pack72bits(Varicode::bitsToInt(bits), packed_extra);
-}
-
-QStringList Varicode::unpackDirectedMessage(const QString &text,
-                                            quint8 *pType) {
-    QStringList unpacked;
-
-    if (text.length() < 12 || text.contains(" ")) {
-        return unpacked;
-    }
-
-    // [3][28][22][11],[2][6] = 72
-    quint8 extra = 0;
-    auto bits = Varicode::intToBits(Varicode::unpack72bits(text, &extra), 64);
-
-    quint8 packed_flag = Varicode::bitsToInt(bits.mid(0, 3));
-    if (packed_flag != Varicode::FrameDirected) {
-        return unpacked;
-    }
-
-    quint32 packed_from = Varicode::bitsToInt(bits.mid(3, 28));
-    quint32 packed_to = Varicode::bitsToInt(bits.mid(31, 28));
-    quint8 packed_cmd = Varicode::bitsToInt(bits.mid(59, 5));
-
-    bool portable_from = ((extra >> 7) & 1) == 1;
-    bool portable_to = ((extra >> 6) & 1) == 1;
-    extra = extra % 64;
-
-    QString from = Varicode::unpackCallsign(packed_from, portable_from);
-    QString to = Varicode::unpackCallsign(packed_to, portable_to);
-    QString cmd = directed_cmds.key(packed_cmd % 32);
-
-    unpacked.append(from);
-    unpacked.append(to);
-    unpacked.append(cmd);
-
-    if (extra != 0) {
-        if (Varicode::isSNRCommand(cmd)) {
-            unpacked.append(Varicode::formatSNR((int)extra - 31));
-        } else {
-            unpacked.append(QString("%1").arg(extra - 31));
-        }
-    }
-
-    if (pType)
-        *pType = packed_flag;
-    return unpacked;
+    return true;
 }
 
 QString packHuffMessage(const QString &input, const QVector<bool> prefix,
@@ -2018,290 +1682,42 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
                              QString const &selectedCall, QString const &text,
                              bool forceIdentify, bool forceData, int submode,
                              MessageInfo *pInfo) {
-
-#define ALLOW_SEND_COMPOUND 1
-#define ALLOW_SEND_COMPOUND_DIRECTED 1
-#define AUTO_PREPEND_DIRECTED 1
-#define AUTO_REMOVE_MYCALL 1
-#define AUTO_PREPEND_DIRECTED_ALLOW_TEXT_CALLSIGNS 1
-#define ALLOW_FORCE_IDENTIFY 1
-
-    bool mycallCompound = Varicode::isCompoundCallsign(mycall);
+    Q_UNUSED(mygrid);
+    Q_UNUSED(selectedCall);
+    Q_UNUSED(pInfo);
 
     QList<QPair<QString, int>> allFrames;
-
-#if JS8_NO_MULTILINE
-    // auto lines = text.split(QRegExp("[\\r\\n]"), QString::SkipEmptyParts);
-#else
     QStringList lines = {text};
-#endif
 
     foreach (QString line, lines) {
         QList<QPair<QString, int>> lineFrames;
 
-        // once we find a directed call, data encode the rest of the line.
-        bool hasDirected = false;
-
-        // do the same for when we have sent data...
-        bool hasData = false;
-
-        // or if we're forcing data to be sent...
         if (forceData) {
             forceIdentify = false;
-            hasData = true;
         }
 
-#if AUTO_REMOVE_MYCALL
         // remove our callsign from the start of the line...
         if (line.startsWith(mycall + ":") || line.startsWith(mycall + " ")) {
             line = lstrip(line.mid(mycall.length() + 1));
         }
-#endif
 
-#if AUTO_RSTRIP_WHITESPACE
-        // remove trailing whitespace as long as there are characters left
-        // afterwards
-        auto rline = rstrip(line);
-        if (!rline.isEmpty()) {
-            line = rline;
+        // ensure our callsign is included
+        if (forceIdentify && !line.isEmpty() && !line.contains(mycall)) {
+            line = QString("%1: %2").arg(mycall).arg(line);
         }
-#endif
 
-#if AUTO_PREPEND_DIRECTED
-        // see if we need to prepend the directed call to the line...
-        // if we have a selected call and the text doesn't start with that
-        // call... and if this isn't a raw message (starting with "`")...
-        // then...
-        if (!selectedCall.isEmpty() && !line.startsWith(selectedCall) &&
-            !line.startsWith("`") && !forceData) {
-            bool lineStartsWithBaseCall =
-                (line.startsWith("@ALLCALL") || Varicode::startsWithCQ(line) ||
-                 Varicode::startsWithHB(line));
-
-#if AUTO_PREPEND_DIRECTED_ALLOW_TEXT_CALLSIGNS
-            auto calls = Varicode::parseCallsigns(line);
-            bool lineStartsWithStandardCall = !calls.isEmpty() &&
-                                              line.startsWith(calls.first()) &&
-                                              calls.first().length() > 3;
-#else
-            bool lineStartsWithStandardCall = false;
-#endif
-
-            if (lineStartsWithBaseCall || lineStartsWithStandardCall) {
-                // pass
-            } else {
-                // if the message doesn't start with a base call
-                // and if there are no other callsigns in this message
-                // or if the first callsign in the message isn't at the
-                // beginning... then we should be auto-prefixing this line with
-                // the selected call
-                auto sep = line.startsWith(" ") ? "" : " ";
-                line = QString("%1%2%3").arg(selectedCall).arg(sep).arg(line);
-            }
-        }
-#endif
+        bool const fast = submode != Varicode::JS8CallNormal;
 
         while (line.size() > 0) {
-            QString frame;
-
-            bool useBcn = false;
-#if ALLOW_SEND_COMPOUND
-            bool useCmp = false;
-#endif
-            bool useDir = false;
-            bool useDat = false;
-
-            int l = 0;
-            QString bcnFrame = Varicode::packHeartbeatMessage(line, mycall, &l);
-
-#if ALLOW_SEND_COMPOUND
-            int o = 0;
-            QString cmpFrame = Varicode::packCompoundMessage(line, &o);
-#endif
-
-            int n = 0;
-            QString dirCmd;
-            QString dirTo;
-            QString dirNum;
-            bool dirToCompound = false;
-            QString dirFrame = Varicode::packDirectedMessage(
-                line, mycall, &dirTo, &dirToCompound, &dirCmd, &dirNum, &n);
-            if (dirToCompound) {
-                qCDebug(varicode_js8)
-                    << "directed message to field is compound" << dirTo;
-            }
-
-#if ALLOW_FORCE_IDENTIFY
-            // if we're sending a data message, then ensure our callsign is
-            // included automatically
-            bool isLikelyDataFrame = lineFrames.isEmpty() &&
-                                     selectedCall.isEmpty() &&
-                                     dirTo.isEmpty() && l == 0 && o == 0;
-            if (forceIdentify && isLikelyDataFrame && !line.contains(mycall)) {
-                line = QString("%1: %2").arg(mycall).arg(line);
-            }
-#endif
             int m = 0;
-            bool fastDataFrame = false;
-            QString datFrame;
-            // TODO: DEPRECATED in 2.2 (the following release will remove
-            // transmission of these frames)
-            if (submode == Varicode::JS8CallNormal) {
-                datFrame = Varicode::packDataMessage(line, &m);
-                fastDataFrame = false;
-            } else {
-                datFrame = Varicode::packFastDataMessage(line, &m);
-                fastDataFrame = true;
+            QString frame = fast ? packFastDataMessage(line, &m)
+                                 : packDataMessage(line, &m);
+            if (m <= 0 || frame.isEmpty()) {
+                break; // nothing packable; avoids looping forever
             }
-
-            // if this parses to a standard FT8 free text message
-            // but it can be parsed as a directed message, then we
-            // should send the directed version. if we've already sent
-            // a directed message or a data frame, we will only follow it
-            // with more data frames.
-
-            if (!hasDirected && !hasData && l > 0) {
-                useBcn = true;
-                hasDirected = false;
-                frame = bcnFrame;
-            }
-#if ALLOW_SEND_COMPOUND
-            else if (!hasDirected && !hasData && o > 0) {
-                useCmp = true;
-                hasDirected = false;
-                frame = cmpFrame;
-            }
-#endif
-            else if (!hasDirected && !hasData && n > 0) {
-                useDir = true;
-                hasDirected = true;
-                frame = dirFrame;
-            } else if (m > 0) {
-                useDat = true;
-                hasData = true;
-                frame = datFrame;
-            }
-
-            if (useBcn) {
-                lineFrames.append({frame, Varicode::JS8Call});
-                line = line.mid(l);
-            }
-
-#if ALLOW_SEND_COMPOUND
-            if (useCmp) {
-                lineFrames.append({frame, Varicode::JS8Call});
-                line = line.mid(o);
-            }
-#endif
-
-            if (useDir) {
-                bool shouldUseStandardFrame = true;
-
-#if ALLOW_SEND_COMPOUND_DIRECTED
-                /**
-                 * We have a few special cases when we are sending to a compound
-                 *call, or our call is a compound call, or both. CASE 0:
-                 *Non-compound:       KN4CRD: J1Y ACK
-                 * -> One standard directed message frame
-                 *
-                 * CASE 1: Compound From:      KN4CRD/P: J1Y ACK
-                 * -> One standard compound frame, followed by a standard
-                 *directed message frame with placeholder
-                 * -> The second standard directed frame _could_ be replaced
-                 *with a compound directed frame
-                 * -> <KN4CRD/P EM73> then <....>: J1Y ACK
-                 * -> <KN4CRD/P EM73> then <J1Y ACK>
-                 *
-                 * CASE 2: Compound To:        KN4CRD: J1Y/P ACK
-                 * -> One standard compound frame, followed by a compound
-                 *directed frame
-                 * -> <KN4CRD EM73> then <J1Y/P ACK>
-                 *
-                 * CASE 3: Compound From & To: KN4CRD/P: J1Y/P ACK
-                 * -> One standard compound frame, followed by a compound
-                 *directed frame
-                 * -> <KN4CRD/P EM73> then <J1Y/P ACK>
-                 **/
-                if (mycallCompound || dirToCompound) {
-                    qCDebug(varicode_js8)
-                        << "compound?" << mycallCompound << dirToCompound;
-                    // Cases 1, 2, 3 all send a standard compound frame first...
-                    QString deCompoundMessage =
-                        QString("`%1 %2").arg(mycall).arg(mygrid);
-                    QString deCompoundFrame = Varicode::packCompoundMessage(
-                        deCompoundMessage, nullptr);
-                    if (!deCompoundFrame.isEmpty()) {
-                        lineFrames.append({deCompoundFrame, Varicode::JS8Call});
-                    }
-
-                    // Followed, by a standard OR compound directed message...
-                    QString dirCompoundMessage =
-                        QString("`%1%2%3").arg(dirTo).arg(dirCmd).arg(dirNum);
-                    QString dirCompoundFrame = Varicode::packCompoundMessage(
-                        dirCompoundMessage, nullptr);
-                    if (!dirCompoundFrame.isEmpty()) {
-                        lineFrames.append(
-                            {dirCompoundFrame, Varicode::JS8Call});
-                    }
-                    shouldUseStandardFrame = false;
-                }
-#endif
-
-                if (shouldUseStandardFrame) {
-                    // otherwise, just send the standard directed frame
-                    lineFrames.append({frame, Varicode::JS8Call});
-                }
-
-                line = line.mid(n);
-
-                // generate a checksum for buffered commands with line data
-                if (Varicode::isCommandBuffered(dirCmd) && !line.isEmpty()) {
-                    qCDebug(varicode_js8) << "generating checksum for line"
-                                          << line << line.mid(1);
-
-                    // strip leading whitespace after a buffered directed
-                    // command
-                    line = lstrip(line);
-
-                    qCDebug(varicode_js8) << "before:" << line;
-
-#if 1
-                    bool skipAprsChecksum =
-                        (dirTo.compare("@APRSIS", Qt::CaseInsensitive) == 0 &&
-                         (dirCmd == " MSG" || dirCmd == " MSG TO:"));
-                    int checksumSize =
-                        skipAprsChecksum
-                            ? 0
-                            : Varicode::isCommandChecksumed(dirCmd);
-#else
-                    int checksumSize = 0;
-#endif
-
-                    if (checksumSize == 32) {
-                        line = line + " " + Varicode::checksum32(line);
-                    } else if (checksumSize == 16) {
-                        line = line + " " + Varicode::checksum16(line);
-                    } else if (checksumSize == 0) {
-                        // pass
-                        qCDebug(varicode_js8)
-                            << "no checksum required for cmd" << dirCmd;
-                    }
-                    qCDebug(varicode_js8) << "after:" << line;
-                }
-
-                if (pInfo) {
-                    pInfo->dirCmd = dirCmd;
-                    pInfo->dirTo = dirTo;
-                    pInfo->dirNum = dirNum;
-                }
-            }
-
-            if (useDat) {
-                // use the standard data frame
-                lineFrames.append({frame, fastDataFrame ? Varicode::JS8CallData
-                                                        : Varicode::JS8Call});
-                line = line.mid(m);
-            }
+            lineFrames.append(
+                {frame, fast ? Varicode::JS8CallData : Varicode::JS8Call});
+            line = line.mid(m);
         }
 
         if (!lineFrames.isEmpty()) {
