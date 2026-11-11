@@ -1354,7 +1354,7 @@ int Varicode::dmmToTenths(int degrees, double minutes, bool negative) {
     return negative ? -t : t;
 }
 
-QString Varicode::packOPSFrame(quint32 id, int latTenths, int lonTenths,
+QString Varicode::packOpsFrame(quint32 id, int latTenths, int lonTenths,
                                int course, int speed) {
     quint32 const latMag = qAbs(latTenths);
     quint32 const lonMag = qAbs(lonTenths);
@@ -1380,7 +1380,7 @@ QString Varicode::packOPSFrame(quint32 id, int latTenths, int lonTenths,
     return Varicode::pack72bits(value, rem);
 }
 
-bool Varicode::unpackOPSFrame(QString const &text, quint32 *id,
+bool Varicode::unpackOpsFrame(QString const &text, quint32 *id,
                               int *latTenths, int *lonTenths, int *course,
                               int *speed) {
     if (text.length() < 12 || text.contains(" ")) {
@@ -1390,19 +1390,19 @@ bool Varicode::unpackOPSFrame(QString const &text, quint32 *id,
 namespace {
 QRegularExpression const &opsRe() {
     static QRegularExpression const re(
-        R"(^\s*OPS\s+(\d{1,5})\s+(\d{1,2})\s+(\d{1,2}(?:\.\d)?)\s*([NS])\s+(\d{1,3})\s+(\d{1,2}(?:\.\d)?)\s*([EW])\s+(\d{1,3}|-+)\s+(\d{1,2})\s*$)",
+        R"(^\s*Ops\s+(\d{1,5})\s+(\d{1,2})\s+(\d{1,2}(?:\.\d)?)\s*([NS])\s+(\d{1,3})\s+(\d{1,2}(?:\.\d)?)\s*([EW])\s+(\d{1,3}|-+)\s+(\d{1,2})\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     return re;
 }
 } // namespace
 
-bool Varicode::isOPSText(QString const &text) {
+bool Varicode::isOpsText(QString const &text) {
     static QRegularExpression const re(
-        R"(^\s*OPS(\s|$))", QRegularExpression::CaseInsensitiveOption);
+        R"(^\s*Ops(\s|$))", QRegularExpression::CaseInsensitiveOption);
     return re.match(text).hasMatch();
 }
 
-QString Varicode::packOPSText(QString const &text) {
+QString Varicode::packOpsText(QString const &text) {
     auto const m = opsRe().match(text);
     if (!m.hasMatch()) {
         return QString{};
@@ -1426,7 +1426,7 @@ QString Varicode::packOPSText(QString const &text) {
     bool const south = m.captured(4).toUpper() == "S";
     bool const west = m.captured(7).toUpper() == "W";
 
-    return Varicode::packOPSFrame(id, Varicode::dmmToTenths(latDeg, latMin, south),
+    return Varicode::packOpsFrame(id, Varicode::dmmToTenths(latDeg, latMin, south),
                                   Varicode::dmmToTenths(lonDeg, lonMin, west),
                                   course, speed);
 }
@@ -1435,7 +1435,7 @@ QString Varicode::packOPSText(QString const &text) {
         Varicode::intToBits(Varicode::unpack72bits(text, &rem), 64) +
         Varicode::intToBits(rem, 8);
 
-    if (Varicode::bitsToInt(bits.mid(0, 3)) != Varicode::FrameOPS) {
+    if (Varicode::bitsToInt(bits.mid(0, 3)) != Varicode::FrameOps) {
         return false;
     }
 
@@ -1733,15 +1733,15 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
     QStringList lines = {text};
 
     foreach (QString line, lines) {
-        // OPS template: "OPS <id> <deg> <min> N|S <deg> <min> E|W <crs> <spd>"
-        if (Varicode::isOPSText(line)) {
-            QString const opsFrame = Varicode::packOPSText(line);
+        // Ops template: "Ops <id> <deg> <min> N|S <deg> <min> E|W <crs> <spd>"
+        if (Varicode::isOpsText(line)) {
+            QString const opsFrame = Varicode::packOpsText(line);
             if (!opsFrame.isEmpty()) {
                 allFrames.append({opsFrame, Varicode::JS8Call |
                                                 Varicode::JS8CallFirst |
                                                 Varicode::JS8CallLast});
             }
-            continue; // invalid OPS text sends nothing
+            continue; // invalid Ops text sends nothing
         }
         QList<QPair<QString, int>> lineFrames;
 
