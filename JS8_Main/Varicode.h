@@ -39,16 +39,16 @@ class Varicode {
 
     /*
 
-    000 = heartbeat
-    001 = compound
-    010 = compound directed
-    011 = directed
+    000 = Ops/Position Report
+    001 = Weather
+    010 = Template Reserved
+    011 = Template Reserved
     1XX = data, with the X lsb bits dropped
     */
     enum FrameType {
         FrameUnknown = 255,        // [11111111] <- only used as a sentinel
-        FrameHeartbeat = 0,        // [000]
-        FrameCompound = 1,         // [001]
+        FrameOps = 0,              // [000]
+        FrameWeather= 1,         // [001]
         FrameCompoundDirected = 2, // [010]
         FrameDirected = 3,         // [011]
         FrameData = 4, // [10X] // but this only encodes the first 2 msb bits
@@ -61,7 +61,7 @@ class Varicode {
 
     static QString frameTypeString(quint8 type) {
         const char *FrameTypeStrings[] = {
-            "FrameHeartbeat",      "FrameCompound", "FrameCompoundDirected",
+            "FrameOps",      "FrameWeather", "FrameCompoundDirected",
             "FrameDirected",       "FrameData",
             "FrameUnknown", // 5
             "FrameDataCompressed",
@@ -163,27 +163,22 @@ class Varicode {
     static bool isCompoundCallsign(const QString &callsign);
     static bool isGroupAllowed(const QString &group);
 
-    static QString packHeartbeatMessage(QString const &text,
-                                        QString const &callsign, int *n);
-    static QStringList unpackHeartbeatMessage(const QString &text,
-                                              quint8 *pType, bool *isAlt,
-                                              quint8 *pBits3);
 
-    static QString packCompoundMessage(QString const &text, int *n);
-    static QStringList unpackCompoundMessage(const QString &text, quint8 *pType,
-                                             quint8 *pBits3);
 
-    static QString packCompoundFrame(const QString &callsign, quint8 type,
-                                     quint16 num, quint8 bits3);
-    static QStringList unpackCompoundFrame(const QString &text, quint8 *pType,
-                                           quint16 *pNum, quint8 *pBits3);
+    // Ops: [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
+    // lat/lon: signed tenths of an arc-minute (N/E +, S/W -)
+    //   |lat| <= 54000 (90 deg), |lon| <= 108000 (180 deg)
+    static bool isOpsText(QString const &text);
+    static QString packOpsText(QString const &text);
+    static QString packOpsFrame(quint32 id, int latTenths, int lonTenths,
+                                int course, int speed);
+    static bool unpackOpsFrame(QString const &text, quint32 *id,
+                               int *latTenths, int *lonTenths, int *course,
+                               int *speed);
+    static int dmmToTenths(int degrees, double minutes, bool negative);
+    
 
-    static QString packDirectedMessage(QString const &text,
-                                       QString const &mycall, QString *pTo,
-                                       bool *pToCompound, QString *pCmd,
-                                       QString *pNum, int *n);
-    static QStringList unpackDirectedMessage(QString const &text,
-                                             quint8 *pType);
+
 
     static QString packDataMessage(QString const &text, int *n);
     static QString unpackDataMessage(QString const &text);
