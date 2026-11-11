@@ -15,8 +15,16 @@ def api(msg_type, text):
     with socket.create_connection((HOST, PORT), timeout=3) as s:
         s.sendall(msg.encode("utf-8"))
 
-
+def single_instance():
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", 47653))   # any unused local port
+    except OSError:
+        sys.exit(0)                    # a companion is already running
+    return s
+  
 def main():
+    lock = single_instance()           # keep this variable alive
     open(OUTBOX, "a").close()
     pos = os.path.getsize(OUTBOX)
     last_sent = 0.0
