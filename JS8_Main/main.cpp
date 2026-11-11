@@ -3,6 +3,7 @@
  * @brief Implementation of the MessageTimeStamper class
  */
 
+#include <QProcess>
 #include <QFile>
 #include <QCoreApplication>
 #include "DriftingDateTime.h"
