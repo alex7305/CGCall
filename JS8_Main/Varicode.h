@@ -39,7 +39,7 @@ class Varicode {
 
     /*
 
-    000 = OPS/Position Report
+    000 = Ops/Position Report
     001 = Weather
     010 = Template Reserved
     011 = Template Reserved
@@ -47,7 +47,7 @@ class Varicode {
     */
     enum FrameType {
         FrameUnknown = 255,        // [11111111] <- only used as a sentinel
-        FrameOPS = 0,              // [000]
+        FrameOps = 0,              // [000]
         FrameWeather= 1,         // [001]
         FrameCompoundDirected = 2, // [010]
         FrameDirected = 3,         // [011]
@@ -61,7 +61,7 @@ class Varicode {
 
     static QString frameTypeString(quint8 type) {
         const char *FrameTypeStrings[] = {
-            "FrameOPS",      "FrameWeather", "FrameCompoundDirected",
+            "FrameOps",      "FrameWeather", "FrameCompoundDirected",
             "FrameDirected",       "FrameData",
             "FrameUnknown", // 5
             "FrameDataCompressed",
@@ -165,7 +165,7 @@ class Varicode {
 
 
 
-    // OPS: [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
+    // Ops: [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
     // lat/lon: signed tenths of an arc-minute (N/E +, S/W -)
     //   |lat| <= 54000 (90 deg), |lon| <= 108000 (180 deg)
     static bool isOpsText(QString const &text);
