@@ -1354,47 +1354,201 @@ int Varicode::dmmToTenths(int degrees, double minutes, bool negative) {
     return negative ? -t : t;
 }
 
+
 QString Varicode::packOpsFrame(quint32 id, int latTenths, int lonTenths,
                                int course, int speed) {
-    quint32 const latMag = qAbs(latTenths);
-    quint32 const lonMag = qAbs(lonTenths);
+    qint64 const latMagnitude = latTenths < 0
+                                    ? -(qint64)latTenths
+                                    : (qint64)latTenths;
+    qint64 const lonMagnitude = lonTenths < 0
+                                    ? -(qint64)lonTenths
+                                    : (qint64)lonTenths;
 
-    if (id > 99999 || latMag > 54000 || lonMag > 108000) {
+    if (id > 99999 || latMagnitude > 54000 ||
+        lonMagnitude > 108000) {
         return QString{};
     }
 
-    quint32 const latField = ((quint32)(latTenths < 0) << 17) | latMag;
-    quint32 const lonField = ((quint32)(lonTenths < 0) << 18) | lonMag;
-    quint32 const pcourse = (course >= 0 && course <= 359) ? course : 511;
+    quint32 const latMag = (quint32)latMagnitude;
+    quint32 const lonMag = (quint32)lonMagnitude;
+
+    quint32 const latField =
+        ((quint32)(latTenths < 0) << 17) | latMag;
+
+    quint32 const lonField =
+        ((quint32)(lonTenths < 0) << 18) | lonMag;
+
+    quint32 const pcourse =
+        (course >= 0 && course <= 359) ? course : 511;
+
     quint32 const pspeed = qBound(0, speed, 63);
 
-    auto const bits = Varicode::intToBits(Varicode::Frame, 3) +
-                      Varicode::intToBits(id, 17) +
-                      Varicode::intToBits(latField, 18) +
-                      Varicode::intToBits(lonField, 19) +
-                      Varicode::intToBits(pcourse, 9) +
-                      Varicode::intToBits(pspeed, 6);
+    auto const bits =
+        Varicode::intToBits(Varicode::FrameOps, 3) +
+        Varicode::intToBits(id, 17) +
+        Varicode::intToBits(latField, 18) +
+        Varicode::intToBits(lonField, 19) +
+        Varicode::intToBits(pcourse, 9) +
+        Varicode::intToBits(pspeed, 6);
 
-    quint64 const value = Varicode::bitsToInt(bits.constBegin(), 64);
-    quint8 const rem = (quint8)Varicode::bitsToInt(bits.constBegin() + 64, 8);
+    if (bits.length() != 72) {
+        return QString{};
+    }
+
+    quint64 const value =
+        Varicode::bitsToInt(bits.constBegin(), 64);
+
+    quint8 const rem =
+        (quint8)Varicode::bitsToInt(bits.constBegin() + 64, 8);
+
     return Varicode::pack72bits(value, rem);
 }
 
-bool Varicode::unpackOpsFrame(QString const &text, quint32 *id,
-                              int *latTenths, int *lonTenths, int *course,
-                              int *speed) {
-    if (text.length() < 12 || text.contains(" ")) {
-        return false;
-    }
-    
 namespace {
+
 QRegularExpression const &opsRe() {
     static QRegularExpression const re(
         R"(^\s*Ops\s+(\d{1,5})\s+(\d{1,2})\s+(\d{1,2}(?:\.\d)?)\s*([NS])\s+(\d{1,3})\s+(\d{1,2}(?:\.\d)?)\s*([EW])\s+(\d{1,3}|-+)\s+(\d{1,2})\s*$)",
         QRegularExpression::CaseInsensitiveOption);
+
     return re;
 }
+
 } // namespace
+
+bool Varicode::isOpsText(QString const &text) {
+    static QRegularExpression const re(
+        R"(^\s*Ops(\s|$))",
+        QRegularExpression::CaseInsensitiveOption);
+
+    return re.match(text).hasMatch();
+}
+
+QString Varicode::packOpsText(QString const &text) {
+    auto const m = opsRe().match(text);
+
+    if (!m.hasMatch()) {
+        return QString{};
+    }
+
+    quint32 const id = m.captured(1).toUInt();
+
+    int const latDeg = m.captured(2).toInt();
+    double const latMin = m.captured(3).toDouble();
+
+    int const lonDeg = m.captured(5).toInt();
+    double const lonMin = m.captured(6).toDouble();
+
+    bool const crsKnown = m.captured(8).at(0).isDigit();
+
+    int const course = crsKnown
+                           ? m.captured(8).toInt()
+                           : -1;
+
+    int const speed = m.captured(9).toInt();
+
+    // Reject invalid coordinates and values.
+    if (latDeg > 90 || latMin >= 60.0 ||
+        (latDeg == 90 && latMin > 0.0) ||
+        lonDeg > 180 || lonMin >= 60.0 ||
+        (lonDeg == 180 && lonMin > 0.0) ||
+        (crsKnown && course > 359) ||
+        speed > 63) {
+        return QString{};
+    }
+
+    bool const south = m.captured(4).toUpper() == "S";
+    bool const west = m.captured(7).toUpper() == "W";
+
+    return Varicode::packOpsFrame(
+        id,
+        Varicode::dmmToTenths(latDeg, latMin, south),
+        Varicode::dmmToTenths(lonDeg, lonMin, west),
+        course,
+        speed);
+}
+
+bool Varicode::unpackOpsFrame(QString const &text,
+                              quint32 *id,
+                              int *latTenths,
+                              int *lonTenths,
+                              int *course,
+                              int *speed) {
+    if (text.length() != 12 || text.contains(" ")) {
+        return false;
+    }
+
+    // Validate all encoded characters.
+    for (const QChar ch : text) {
+        if (!alphabet72.contains(ch)) {
+            return false;
+        }
+    }
+
+    quint8 rem = 0;
+
+    auto const bits =
+        Varicode::intToBits(
+            Varicode::unpack72bits(text, &rem), 64) +
+        Varicode::intToBits(rem, 8);
+
+    if (Varicode::bitsToInt(bits.mid(0, 3)) !=
+        Varicode::FrameOps) {
+        return false;
+    }
+
+    quint32 const pid =
+        (quint32)Varicode::bitsToInt(bits.mid(3, 17));
+
+    quint32 const latField =
+        (quint32)Varicode::bitsToInt(bits.mid(20, 18));
+
+    quint32 const lonField =
+        (quint32)Varicode::bitsToInt(bits.mid(38, 19));
+
+    quint32 const pcourse =
+        (quint32)Varicode::bitsToInt(bits.mid(57, 9));
+
+    quint32 const pspeed =
+        (quint32)Varicode::bitsToInt(bits.mid(66, 6));
+
+    quint32 const latMag = latField & 0x1FFFF;
+    quint32 const lonMag = lonField & 0x3FFFF;
+
+    if (pid > 99999 ||
+        latMag > 54000 ||
+        lonMag > 108000) {
+        return false;
+    }
+
+    if (id) {
+        *id = pid;
+    }
+
+    if (latTenths) {
+        *latTenths = (latField >> 17)
+                         ? -(int)latMag
+                         : (int)latMag;
+    }
+
+    if (lonTenths) {
+        *lonTenths = (lonField >> 18)
+                         ? -(int)lonMag
+                         : (int)lonMag;
+    }
+
+    if (course) {
+        *course = (pcourse <= 359)
+                      ? (int)pcourse
+                      : -1;
+    }
+
+    if (speed) {
+        *speed = (int)pspeed;
+    }
+
+    return true;
+}
 
 bool Varicode::isOpsText(QString const &text) {
     static QRegularExpression const re(
