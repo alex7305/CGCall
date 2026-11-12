@@ -52,18 +52,15 @@ QChar submodeChar(int const submode) {
 // size 2, but any part might be empty.
 
 // Format signed tenths of an arc-minute as DD°MM.m'H (or DDD for longitude).
-QString formatDmm(int const tenths, int const degWidth, QChar const pos,
-                  QChar const neg) {
-    int const mag = qAbs(tenths);
-    int const deg = mag / 600;
-    int const minTenths = mag % 600;
+QString formatDm(int const minutes, int const degWidth, QChar const pos,
+                 QChar const neg) {
+    int const mag = qAbs(minutes);
 
-    return QStringLiteral("%1%2%3.%4'%5")
-        .arg(deg, degWidth, 10, QChar('0'))
+    return QStringLiteral("%1%2%3'%4")
+        .arg(mag / 60, degWidth, 10, QChar('0'))
         .arg(QChar(0x00B0))
-        .arg(minTenths / 10, 2, 10, QChar('0'))
-        .arg(minTenths % 10)
-        .arg(tenths < 0 ? neg : pos);
+        .arg(mag % 60, 2, 10, QChar('0'))
+        .arg(minutes < 0 ? neg : pos);
 }
 } // namespace
 
@@ -167,22 +164,29 @@ bool DecodedText::tryUnpackOps(QString const &m) {
     if ((bits_ & Varicode::JS8CallData) == Varicode::JS8CallData)
         return false;
 
-    quint32 id = 0;
+    quint32 from = 0, to = 0;
+    bool underway = false;
     int lat = 0, lon = 0, course = -1, speed = 0;
 
-    if (!Varicode::unpackOpsFrame(m, &id, &lat, &lon, &course, &speed))
+    if (!Varicode::unpackOpsFrame(m, &from, &to, &underway, &lat, &lon, &course,
+                                  &speed))
         return false;
 
     frameType_ = Varicode::FrameOps;
 
-    message_ = QStringLiteral("USCGC %1 | %2 %3 | CRS %4 | SPD %5 kt ")
-                   .arg(id, 5, 10, QChar('0'))
-                   .arg(formatDmm(lat, 2, QChar('N'), QChar('S')))
-                   .arg(formatDmm(lon, 3, QChar('E'), QChar('W')))
-                   .arg(course < 0 ? QStringLiteral("---")
-                                   : QStringLiteral("%1").arg(course, 3, 10,
-                                                              QChar('0')))
-                   .arg(speed);
+    message_ =
+        QStringLiteral("FROM %1 | TO %2 | %3 %4 | CRS %5 | SPD %6 kt | %7 ")
+            .arg(from, 5, 10, QChar('0'))
+            .arg(to == 0 ? QStringLiteral("ALL")
+                         : QStringLiteral("%1").arg(to, 3, 10, QChar('0')))
+            .arg(formatDm(lat, 2, QChar('N'), QChar('S')))
+            .arg(formatDm(lon, 3, QChar('E'), QChar('W')))
+            .arg(course < 0 ? QStringLiteral("---")
+                            : QStringLiteral("%1").arg(course, 3, 10,
+                                                       QChar('0')))
+            .arg(speed)
+            .arg(underway ? QStringLiteral("UNDERWAY")
+                          : QStringLiteral("ANCHORED"));
 
     return true;
 }
