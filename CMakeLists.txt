@@ -503,15 +503,19 @@ if (WIN32)
   # If not given explicitly, look for a "dll" folder inside each prefix path
   # entry (e.g. C:/development/js8lib/dll), so no preset edit is needed.
 
+    # Also try the folders next to the source tree (C:/development/js8lib and
+  # C:/development/js8libs when the source is in C:/development/CGCall).
+
   if (NOT JS8_DLL_DIR)
-    foreach(prefix ${CMAKE_PREFIX_PATH})
+    foreach(prefix ${CMAKE_PREFIX_PATH}
+                   "${CMAKE_SOURCE_DIR}/../js8lib"
+                   "${CMAKE_SOURCE_DIR}/../js8libs")
       if (IS_DIRECTORY "${prefix}/dll")
-        set(JS8_DLL_DIR "${prefix}/dll")
+        get_filename_component(JS8_DLL_DIR "${prefix}/dll" ABSOLUTE)
         break()
       endif()
     endforeach()
   endif()
-
   if (JS8_DLL_DIR)
     message(STATUS "Third-party DLLs will be copied from: ${JS8_DLL_DIR}")
     add_custom_command(
