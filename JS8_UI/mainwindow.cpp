@@ -5229,24 +5229,7 @@ void UI_Constructor::updateHBButtonDisplay() {
 }
 
 void UI_Constructor::updateCQButtonDisplay() {
-    if (m_cq_loop->isActive()) {
-        QDateTime now = DriftingDateTime::currentDateTimeUtc();
-        QDateTime nextCQ = m_cq_loop->nextActivity();
-        long secs = std::lround(now.msecsTo(nextCQ) / 1000.0);
-        // qCDebug(mainwindow_js8)
-        //         << "updateCQButtonDisplay, signal due at" << nextCQ
-        //         << "so" << secs << "s to go";
-        if (secs > 0) {
-            ui->cqMacroButton->setText(QString("CQ (%1)").arg(secs));
-        } else {
-            // Dead code?
-            ui->cqMacroButton->setText("CQ (now)");
-        }
-    } else {
-        ui->cqMacroButton->setText("CQ");
-        // qCDebug(mainwindow_js8) << "updateCQButtonDisplay while m_cq_loop is
-        // off";
-    }
+    ui->cqMacroButton->setText("OPS");
 }
 
 void UI_Constructor::updateTextDisplay() {
