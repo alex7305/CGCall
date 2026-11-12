@@ -500,7 +500,20 @@ if (WIN32)
 
   set(JS8_DLL_DIR "" CACHE PATH "Folder of third-party DLLs to ship beside the exe")
 
+  # If not given explicitly, look for a "dll" folder inside each prefix path
+  # entry (e.g. C:/development/js8lib/dll), so no preset edit is needed.
+
+  if (NOT JS8_DLL_DIR)
+    foreach(prefix ${CMAKE_PREFIX_PATH})
+      if (IS_DIRECTORY "${prefix}/dll")
+        set(JS8_DLL_DIR "${prefix}/dll")
+        break()
+      endif()
+    endforeach()
+  endif()
+
   if (JS8_DLL_DIR)
+    message(STATUS "Third-party DLLs will be copied from: ${JS8_DLL_DIR}")
     add_custom_command(
       TARGET ${TARGET}
       POST_BUILD
