@@ -1746,7 +1746,7 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
     foreach (QString line, lines) {
         // Ops template: "Ops <id> <deg> <min> N|S <deg> <min> E|W <crs> <spd>"
         if (Varicode::isOpsText(line)) {
-            QString const opsFrame = Varicode::packOpsText(line);
+            QString const opsFrame = Varicode::packOpsText(line, mycall);
             if (!opsFrame.isEmpty()) {
                 allFrames.append({opsFrame, Varicode::JS8Call |
                                                 Varicode::JS8CallFirst |
