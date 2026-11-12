@@ -4117,36 +4117,40 @@ void UI_Constructor::sendCQ(bool repeat) {
 }
 
 void UI_Constructor::on_cqMacroButton_toggled(bool checked) {
-    qCDebug(mainwindow_js8) << "on_cqMacroButton_toggled(" << checked << ")";
-    if (checked) {
-        clearCallsignSelected();
-
-        if (m_cqInterval) {
-            qCDebug(mainwindow_js8)
-                << "Starting CQ loop from on_cqMacroButton_toggled()";
-            m_cq_loop->onTxLoopPeriodChangeStart(m_cqInterval * (qint64)60000);
-        } else {
-            qCDebug(mainwindow_js8)
-                << "Sending single CQ from on_cqMacroButton_toggled()";
-            m_cq_loop->onLoopCancel();
-            sendCQ(false);
-
-            // make this button emulate a single press button
-            ui->cqMacroButton->setChecked(false);
-        }
-    } else {
-        if (m_cq_loop->isActive() && m_cqButtonIsLongterm) {
-            qCDebug(mainwindow_js8)
-                << "Stopping CQ loop from on_cqMacroButton_toggled()";
-            m_cq_loop->onLoopCancel();
-        }
+    // The former CQ button is now the OPS button: a single-press button
+    // that opens the OPS entry dialog.
+    if (!checked) {
+        return;
     }
-    qCDebug(mainwindow_js8)
-        << "updateCQButtonDisplay called via on_cqMacroButton_toggled";
-    updateCQButtonDisplay();
-}
 
+    ui->cqMacroButton->setChecked(false);
+    openOpsDialog();
+}
 void UI_Constructor::on_cqMacroButton_clicked() {}
+
+void UI_Constructor::openOpsDialog() {
+    if (!ensureCallsignSet(true)) {
+        return;
+    }
+
+    OpsDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString const text = dlg.commandText();
+
+    // refuse to queue anything the encoder would silently drop
+    if (Varicode::packOpsText(text, m_config.my_callsign()).isEmpty()) {
+        JS8MessageBox::warning_message(
+            this, tr("Could not encode this OPS report. Check that MyCall is "
+                     "exactly 5 digits and the values are in range."));
+        return;
+    }
+
+    enqueueMessage(PriorityNormal, text, -1, nullptr);
+    processTxQueue();
+}
 
 void UI_Constructor::on_replyMacroButton_clicked() {
     QString call = callsignSelected();
@@ -5229,26 +5233,8 @@ void UI_Constructor::updateHBButtonDisplay() {
 }
 
 void UI_Constructor::updateCQButtonDisplay() {
-    if (m_cq_loop->isActive()) {
-        QDateTime now = DriftingDateTime::currentDateTimeUtc();
-        QDateTime nextCQ = m_cq_loop->nextActivity();
-        long secs = std::lround(now.msecsTo(nextCQ) / 1000.0);
-        // qCDebug(mainwindow_js8)
-        //         << "updateCQButtonDisplay, signal due at" << nextCQ
-        //         << "so" << secs << "s to go";
-        if (secs > 0) {
-            ui->cqMacroButton->setText(QString("CQ (%1)").arg(secs));
-        } else {
-            // Dead code?
-            ui->cqMacroButton->setText("CQ (now)");
-        }
-    } else {
-        ui->cqMacroButton->setText("CQ");
-        // qCDebug(mainwindow_js8) << "updateCQButtonDisplay while m_cq_loop is
-        // off";
-    }
+    ui->cqMacroButton->setText(QStringLiteral("OPS"));
 }
-
 void UI_Constructor::updateTextDisplay() {
     if (m_txTextDirty) {
         // debounce frame and word count
