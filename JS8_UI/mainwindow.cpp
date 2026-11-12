@@ -8,6 +8,9 @@
 #include "mainwindow.h"
 
 #include "moc_mainwindow.cpp"
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QProcess>
 
 static char message[29];
