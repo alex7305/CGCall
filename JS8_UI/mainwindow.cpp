@@ -5,9 +5,12 @@
  *   all functionality of the JS8call main window
  */
 
+
 #include "mainwindow.h"
+#include "OpsDialog.h"
 
 #include "moc_mainwindow.cpp"
+
 
 static char message[29];
 static char msgsent[29];
