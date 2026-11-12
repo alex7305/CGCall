@@ -1,3 +1,4 @@
+
 #ifndef VARICODE_H
 #define VARICODE_H
 
@@ -6,21 +7,25 @@
  **/
 
 #include <QBitArray>
+#include <QList>
+#include <QMap>
+#include <QPair>
 #include <QRegularExpression>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QThread>
 #include <QVector>
+#include <QtGlobal>
 
 class Varicode {
   public:
-    // extra information out of buildMessageFrames
     struct MessageInfo {
         QString dirTo;
         QString dirCmd;
         QString dirNum;
     };
 
-    // submode types
     enum SubmodeType {
         JS8CallNormal = 0,
         JS8CallFast = 1,
@@ -29,51 +34,49 @@ class Varicode {
         JS8CallUltra = 8
     };
 
-    // frame type transmitted via itype and decoded by the ft8 decoded
     enum TransmissionType {
-        JS8Call = 0,      // [000] <- any other frame of the message
-        JS8CallFirst = 1, // [001] <- the first frame of a message
-        JS8CallLast = 2,  // [010] <- the last frame of a message
-        JS8CallData = 4,  // [100] <- flagged frame (no frame type header)
+        JS8Call = 0,
+        JS8CallFirst = 1,
+        JS8CallLast = 2,
+        JS8CallData = 4
     };
 
     /*
-
-    000 = OPS/Position Report
-    001 = Weather
-    010 = Template Reserved
-    011 = Template Reserved
-    1XX = data, with the X lsb bits dropped
+      000 = Ops/Position Report
+      001 = Weather
+      010 = Template Reserved
+      011 = Template Reserved
+      1XX = data, with the X lsb bits dropped
     */
     enum FrameType {
-        FrameUnknown = 255,        // [11111111] <- only used as a sentinel
-        FrameOPS = 0,              // [000]
-        FrameWeather= 1,         // [001]
-        FrameCompoundDirected = 2, // [010]
-        FrameDirected = 3,         // [011]
-        FrameData = 4, // [10X] // but this only encodes the first 2 msb bits
-                       // and drops the lsb
-        FrameDataCompressed = 6, // [11X] // but this only encodes the first 2
-                                 // msb bits and drops the lsb
+        FrameUnknown = 255,
+        FrameOps = 0,
+        FrameWeather = 1,
+        FrameCompoundDirected = 2,
+        FrameDirected = 3,
+        FrameData = 4,
+        FrameDataCompressed = 6
     };
 
     static const quint8 FrameTypeMax = 6;
 
     static QString frameTypeString(quint8 type) {
         const char *FrameTypeStrings[] = {
-            "FrameOPS",      "FrameWeather", "FrameCompoundDirected",
-            "FrameDirected",       "FrameData",
-            "FrameUnknown", // 5
-            "FrameDataCompressed",
+            "FrameOps",
+            "FrameWeather",
+            "FrameCompoundDirected",
+            "FrameDirected",
+            "FrameData",
+            "FrameUnknown",
+            "FrameDataCompressed"
         };
 
         if (type > FrameTypeMax) {
             return "FrameUnknown";
         }
+
         return FrameTypeStrings[type];
     }
-
-    // Varicode();
 
     static SubmodeType intToSubmode(int sm);
 
@@ -94,19 +97,25 @@ class Varicode {
     static QString formatPWR(int dbm);
 
     static QString checksum16(QString const &input);
-    static bool checksum16Valid(QString const &checksum, QString const &input);
+    static bool checksum16Valid(QString const &checksum,
+                                QString const &input);
 
     static QString checksum32(QString const &input);
-    static bool checksum32Valid(QString const &checksum, QString const &input);
+    static bool checksum32Valid(QString const &checksum,
+                                QString const &input);
 
     static QStringList parseCallsigns(QString const &input);
     static QStringList parseGrids(QString const &input);
 
     static QList<QPair<int, QVector<bool>>>
-    huffEncode(const QMap<QString, QString> &huff, QString const &text);
+    huffEncode(const QMap<QString, QString> &huff,
+               QString const &text);
+
     static QString huffDecode(const QMap<QString, QString> &huff,
                               QVector<bool> const &bitvec);
-    static QSet<QString> huffValidChars(const QMap<QString, QString> &huff);
+
+    static QSet<QString> huffValidChars(
+        const QMap<QString, QString> &huff);
 
     static QVector<bool> bytesToBits(char *bitvec, int n);
     static QVector<bool> strToBits(QString const &bitvec);
@@ -159,26 +168,37 @@ class Varicode {
     static bool isCommandBuffered(const QString &cmd);
     static int isCommandChecksumed(const QString &cmd);
     static bool isCommandAutoreply(const QString &cmd);
-    static bool isValidCallsign(const QString &callsign, bool *pIsCompound);
+
+    static bool isValidCallsign(const QString &callsign,
+                                bool *pIsCompound);
     static bool isCompoundCallsign(const QString &callsign);
     static bool isGroupAllowed(const QString &group);
 
-
-
-    // OPS: [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
+    // Ops:
+    // [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
     // lat/lon: signed tenths of an arc-minute (N/E +, S/W -)
-    //   |lat| <= 54000 (90 deg), |lon| <= 108000 (180 deg)
+    // |lat| <= 54000 (90 degrees)
+    // |lon| <= 108000 (180 degrees)
+
     static bool isOpsText(QString const &text);
     static QString packOpsText(QString const &text);
-    static QString packOpsFrame(quint32 id, int latTenths, int lonTenths,
-                                int course, int speed);
-    static bool unpackOpsFrame(QString const &text, quint32 *id,
-                               int *latTenths, int *lonTenths, int *course,
+
+    static QString packOpsFrame(quint32 id,
+                                int latTenths,
+                                int lonTenths,
+                                int course,
+                                int speed);
+
+    static bool unpackOpsFrame(QString const &text,
+                               quint32 *id,
+                               int *latTenths,
+                               int *lonTenths,
+                               int *course,
                                int *speed);
-    static int dmmToTenths(int degrees, double minutes, bool negative);
-    
 
-
+    static int dmmToTenths(int degrees,
+                           double minutes,
+                           bool negative);
 
     static QString packDataMessage(QString const &text, int *n);
     static QString unpackDataMessage(QString const &text);
@@ -187,20 +207,31 @@ class Varicode {
     static QString unpackFastDataMessage(QString const &text);
 
     static QList<QPair<QString, int>>
-    buildMessageFrames(QString const &mycall, QString const &mygrid,
-                       QString const &selectedCall, QString const &text,
-                       bool forceIdentify, bool forceData, int submode,
+    buildMessageFrames(QString const &mycall,
+                       QString const &mygrid,
+                       QString const &selectedCall,
+                       QString const &text,
+                       bool forceIdentify,
+                       bool forceData,
+                       int submode,
                        MessageInfo *pInfo = nullptr);
 };
 
 class BuildMessageFramesThread : public QThread {
     Q_OBJECT
+
   public:
-    BuildMessageFramesThread(QString const &mycall, QString const &mygrid,
-                             QString const &selectedCall, QString const &text,
-                             bool forceIdentify, bool forceData, int submode,
+    BuildMessageFramesThread(QString const &mycall,
+                             QString const &mygrid,
+                             QString const &selectedCall,
+                             QString const &text,
+                             bool forceIdentify,
+                             bool forceData,
+                             int submode,
                              QObject *parent = nullptr);
+
     void run() override;
+
   signals:
     void resultReady(int);
 

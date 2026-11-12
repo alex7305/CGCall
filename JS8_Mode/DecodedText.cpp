@@ -51,10 +51,19 @@ QChar submodeChar(int const submode) {
 // parts; the parts are at this point guaranteed to be at least of
 // size 2, but any part might be empty.
 
-QString buildCompound(QStringList const &parts) {
-    auto subset = parts.mid(0, 2);
-    subset.removeAll("");
-    return subset.join('/');
+// Format signed tenths of an arc-minute as DD°MM.m'H (or DDD for longitude).
+QString formatDmm(int const tenths, int const degWidth, QChar const pos,
+                  QChar const neg) {
+    int const mag = qAbs(tenths);
+    int const deg = mag / 600;
+    int const minTenths = mag % 600;
+
+    return QStringLiteral("%1%2%3.%4'%5")
+        .arg(deg, degWidth, 10, QChar('0'))
+        .arg(QChar(0x00B0))
+        .arg(minTenths / 10, 2, 10, QChar('0'))
+        .arg(minTenths % 10)
+        .arg(tenths < 0 ? neg : pos);
 }
 } // namespace
 
@@ -150,108 +159,30 @@ bool DecodedText::tryUnpackData(QString const &m) {
  * @return true
  * @return false
  */
-bool DecodedText::tryUnpackHeartbeat(QString const &m) {
+/**
+ * @private
+ * @brief Try to unpack OPS message (private)
+ */
+bool DecodedText::tryUnpackOps(QString const &m) {
     if ((bits_ & Varicode::JS8CallData) == Varicode::JS8CallData)
         return false;
 
-    bool isAlt = false;
-    quint8 type = Varicode::FrameUnknown;
-    quint8 bits3 = 0;
-    auto const parts =
-        Varicode::unpackHeartbeatMessage(m, &type, &isAlt, &bits3);
+    quint32 id = 0;
+    int lat = 0, lon = 0, course = -1, speed = 0;
 
-    if (parts.length() < 2)
+    if (!Varicode::unpackOpsFrame(m, &id, &lat, &lon, &course, &speed))
         return false;
 
-    // Heartbeat Alt Type
-    // ------------------
-    // 1         0   HB
-    // 1         1   CQ
+    frameType_ = Varicode::FrameOps;
 
-    frameType_ = type;
-    isHeartbeat_ = true;
-    isAlt_ = isAlt;
-    extra_ = parts.value(2, QString());
-    compound_ = buildCompound(parts);
-    message_ = compound_ % ": ";
-
-    if (isAlt) {
-        message_ += "@ALLCALL " % Varicode::cqString(bits3);
-    } else {
-        auto const sbits3 = Varicode::hbString(bits3);
-        message_ += "@HB " % (sbits3 == "HB" ? "HEARTBEAT" : sbits3);
-    }
-
-    message_ += ' ' % extra_ % ' ';
-
-    return true;
-}
-
-/**
- * @private
- * @brief Try to unpack compound message (private)
- *
- * @param m
- * @return true
- * @return false
- */
-bool DecodedText::tryUnpackCompound(QString const &m) {
-    quint8 type = Varicode::FrameUnknown;
-    quint8 bits3 = 0;
-    auto const parts = Varicode::unpackCompoundMessage(m, &type, &bits3);
-
-    if (parts.length() < 2 ||
-        (bits_ & Varicode::JS8CallData) == Varicode::JS8CallData)
-        return false;
-
-    frameType_ = type;
-    extra_ = parts.mid(2).join(' ');
-    compound_ = buildCompound(parts);
-
-    if (type == Varicode::FrameCompound) {
-        message_ = compound_ % ": ";
-    } else if (type == Varicode::FrameCompoundDirected) {
-        message_ = compound_ % extra_ % ' ';
-
-        directed_.reserve(parts.size() - 2 + 2);
-        directed_ = {"<....>", compound_};
-        directed_ += parts.mid(2);
-    }
-
-    return true;
-}
-
-/**
- * @private
- * @brief Try to unpack directed message (private)
- *
- * @param m
- * @return true
- * @return false
- */
-bool DecodedText::tryUnpackDirected(QString const &m) {
-    if ((bits_ & Varicode::JS8CallData) == Varicode::JS8CallData)
-        return false;
-
-    quint8 type = Varicode::FrameUnknown;
-    QStringList const parts = Varicode::unpackDirectedMessage(m, &type);
-
-    if (parts.isEmpty())
-        return false;
-
-    switch (parts.length()) {
-    case 3: // Directed message         => "0: 12 "
-    case 4: // Directed numeric message => "0: 12 3 "
-        message_ =
-            parts.at(0) % ": " % parts.at(1) % parts.mid(2).join(' ') % ' ';
-        break;
-    default: // Free text message
-        message_ = parts.join("");
-        break;
-    }
-
-    directed_ = parts;
-    frameType_ = type;
+    message_ = QStringLiteral("ID %1 | %2 %3 | CRS %4 | SPD %5 kt ")
+                   .arg(id, 5, 10, QChar('0'))
+                   .arg(formatDmm(lat, 2, QChar('N'), QChar('S')))
+                   .arg(formatDmm(lon, 3, QChar('E'), QChar('W')))
+                   .arg(course < 0 ? QStringLiteral("---")
+                                   : QStringLiteral("%1").arg(course, 3, 10,
+                                                              QChar('0')))
+                   .arg(speed);
 
     return true;
 }
