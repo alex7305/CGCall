@@ -4125,17 +4125,24 @@ void UI_Constructor::on_cqMacroButton_toggled(bool checked) {
     // Make the button act like a single-press button
     ui->cqMacroButton->setChecked(false);
 
-    // Adjust this path to where your script lives.
-    // pythonw avoids a stray console window (the script uses tkinter).
-    QString const script = "C:/development/CGCall/companion/cgcall_entry.py";
+    QString const dir = QCoreApplication::applicationDirPath();
 
-    if (!QProcess::startDetached("pythonw", {script})) {
-        // fall back to python if pythonw isn't on PATH
-        QProcess::startDetached("python", {script});
+    // 1) Packaged exe sitting beside JS8Call.exe (the shipped layout)
+    QString const exe = QDir(dir).filePath("cgcall_entry.exe");
+
+    if (QFileInfo::exists(exe)) {
+        QProcess::startDetached(exe, {});
+    } else {
+        // 2) Dev fallback: run the script with Python from your repo
+        QString const script = "C:/development/CGCall/companion/cgcall_entry.py";
+        if (!QProcess::startDetached("pythonw", {script})) {
+            QProcess::startDetached("python", {script});
+        }
     }
 
     updateCQButtonDisplay();
 }
+
 void UI_Constructor::on_cqMacroButton_clicked() {}
 
 void UI_Constructor::on_replyMacroButton_clicked() {
