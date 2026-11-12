@@ -359,10 +359,10 @@ target_sources(
   JS8_UI/Configuration.cpp
   JS8_UI/About.cpp
   JS8_UI/LogQSO.cpp
-  JS8_UI/OpsDialog.cpp
   JS8_UI/mainwindow.cpp
   JS8_UI/MessageReplyDialog.cpp
   JS8_UI/MessagePanel.cpp
+  JS8_UI/OpsDialog.cpp
   JS8_UI/WF.cpp
   JS8_UI/WideGraph.cpp
   JS8_Widgets/CheckableItemComboBox.cpp
@@ -468,25 +468,50 @@ if (APPLE)
   )
 endif (APPLE)
 
+#------------------------------------------------------------------------------#
+# On Windows, make the build output folder a complete, self-contained package:
+# the exe, the Qt DLLs and plugins (windeployqt), and any third-party DLLs
+# (Hamlib, FFTW, libusb) from JS8_DLL_DIR, all side by side. Zip that folder
+# and it runs on any Windows PC with no installs and no PATH changes.
+#
+# Set the DLL folder on the command line or in CMakePresets.json:
+#   -DJS8_DLL_DIR=C:/development/js8lib/dll
+#------------------------------------------------------------------------------#
+
 if (WIN32)
 
   # Windows icons require an RC file.
 
   target_sources(${TARGET} PRIVATE JS8_Include/js8call.rc)
 
-  # Find the windeployqt command and run it against the generated binary,
-  # which should handle all the gnarly bits.
+  # Find the windeployqt command and run it against the generated binary.
+  # No --libdir/--plugindir: Qt DLLs and plugins must sit next to the exe,
+  # because Windows only searches the exe's own folder for DLLs.
 
   find_program(WINDEPLOYQT NAMES windeployqt HINTS "${QT_BIN_DIR}")
   add_custom_command(
     TARGET ${TARGET}
     POST_BUILD
-    COMMAND "${WINDEPLOYQT}" "$<TARGET_FILE:${TARGET}>"
-    --libdir JS8Call
-    --plugindir JS8Call
-    --no-translations
+    COMMAND "${WINDEPLOYQT}" "$<TARGET_FILE:${TARGET}>" --no-translations
     COMMENT "Running windeployqt..."
   )
+
+  # Third-party DLLs (Hamlib, FFTW, libusb, ...) copied beside the exe.
+
+  set(JS8_DLL_DIR "" CACHE PATH "Folder of third-party DLLs to ship beside the exe")
+
+  if (JS8_DLL_DIR)
+    add_custom_command(
+      TARGET ${TARGET}
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+              "${JS8_DLL_DIR}" "$<TARGET_FILE_DIR:${TARGET}>"
+      COMMENT "Copying third-party DLLs..."
+    )
+  else()
+    message(WARNING "JS8_DLL_DIR is not set; Hamlib/FFTW/libusb DLLs will not be copied next to the exe.")
+  endif()
+
 endif (WIN32)
 
 #------------------------------------------------------------------------------#
