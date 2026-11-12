@@ -36,7 +36,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 if (NOT CMAKE_PREFIX_PATH)
-  set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/../js8libs)
+  set(CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/../js8lib)
 endif()
 
 #------------------------------------------------------------------------------#
