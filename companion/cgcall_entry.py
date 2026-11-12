@@ -169,21 +169,20 @@ def single_instance():
 
 # ------------------------------------------------------------- formatting
 def format_message(v):
-    """Format all values into the OPS transmission message."""
-
+    """OPS (TO) (u/a) (latDeg) (latMin) (N/S) (lonDeg) (lonMin) (E/W) (CRS) (SPEED)"""
     return (
         f"{PREFIX} "
-        f"{v['callsign']} "
+        f"{v['to']} "
+        f"{v['state']} "
         f"{v['latDeg']:02d} "
-        f"{v['latMin']:.1f} "
+        f"{v['latMin']:02d} "
         f"{v['latDir']} "
         f"{v['lonDeg']:03d} "
-        f"{v['lonMin']:.1f} "
+        f"{v['lonMin']:02d} "
         f"{v['lonDir']} "
         f"{v['course']} "
         f"{v['speed']}"
     )
-
 
 # ------------------------------------------------------------------- window
 class App:
@@ -193,71 +192,54 @@ class App:
         self.values = {}
         self.entries = {}
 
-        root.title("CGCall OPS Entry")
+                root.title("CGCall OPS Entry")
 
-        # Callsign
-        self.add_field(0, "Callsign (0 - 99999)", "callsign")
+        # To
+        self.add_field(0, "To (0 - 127, 0 = broadcast)", "to")
+
+        # Underway / Anchored
+        tk.Label(root, text="Status", anchor="w").grid(
+            row=1, column=0, sticky="w", padx=8, pady=4)
+        self.state = tk.StringVar(value="Underway")
+        tk.OptionMenu(root, self.state, "Underway", "Anchored").grid(
+            row=1, column=1, sticky="w", padx=5)
 
         # Latitude
-        tk.Label(
-            root, text="Latitude", anchor="w"
-        ).grid(row=1, column=0, sticky="w", padx=8, pady=4)
-
-        self.add_entry(1, "latDeg", 1)
-
-        tk.Label(root, text="Degrees").grid(
-            row=1, column=2, sticky="w"
-        )
-
-        self.add_entry(2, "latMin", 1)
-
-        tk.Label(root, text="Minutes").grid(
-            row=2, column=2, sticky="w"
-        )
-
+        tk.Label(root, text="Latitude (deg / min)", anchor="w").grid(
+            row=2, column=0, sticky="w", padx=8, pady=4)
+        self.add_entry(2, "latDeg", 1, width=6)
+        self.add_entry(2, "latMin", 2, width=6)
         self.latDir = tk.StringVar(value="N")
-
-        tk.OptionMenu(
-            root, self.latDir, "N", "S"
-        ).grid(row=1, column=3, padx=5)
+        tk.OptionMenu(root, self.latDir, "N", "S").grid(row=2, column=3, padx=5)
 
         # Longitude
-        tk.Label(
-            root, text="Longitude", anchor="w"
-        ).grid(row=3, column=0, sticky="w", padx=8, pady=4)
-
-        self.add_entry(3, "lonDeg", 1)
-
-        tk.Label(root, text="Degrees").grid(
-            row=3, column=2, sticky="w"
-        )
-
-        self.add_entry(4, "lonMin", 1)
-
-        tk.Label(root, text="Minutes").grid(
-            row=4, column=2, sticky="w"
-        )
-
+        tk.Label(root, text="Longitude (deg / min)", anchor="w").grid(
+            row=3, column=0, sticky="w", padx=8, pady=4)
+        self.add_entry(3, "lonDeg", 1, width=6)
+        self.add_entry(3, "lonMin", 2, width=6)
         self.lonDir = tk.StringVar(value="W")
-
-        tk.OptionMenu(
-            root, self.lonDir, "E", "W"
-        ).grid(row=3, column=3, padx=5)
+        tk.OptionMenu(root, self.lonDir, "E", "W").grid(row=3, column=3, padx=5)
 
         # Course and speed
-        self.add_field(5, "Course (0 - 359)", "course")
-        self.add_field(6, "Speed (0 - 63)", "speed")
+        self.add_field(4, "Course (0 - 359)", "course")
+        self.add_field(5, "Speed (0 - 63)", "speed")
+
+        # Send button
+        tk.Button(root, text="Send", width=12, command=self.send).grid(
+            row=6, column=0, columnspan=4, pady=8)
 
         # Status
         self.status = tk.Label(
             root, text="", fg="#444", anchor="w",
             justify="left", wraplength=360
         )
+        self.status.grid(row=7, column=0, columnspan=4, sticky="w", padx=8)
 
-        self.status.grid(
-            row=8, column=0, columnspan=4,
-            sticky="w", padx=8
-        )
+        root.bind("<Return>", lambda _e: self.send())
+        root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        self.entries["to"].focus_set()
+        self.root.after(200, self.poll)
 
         # Send button
         tk.Button(
@@ -319,16 +301,18 @@ class App:
             return
         self.root.destroy()
 
-    def read_values(self):
+        def read_values(self):
 
         values = {}
         errors = []
 
-        # Integer fields
+        # All numeric fields are whole numbers now
         integer_ranges = {
-            "callsign": (0, 99999),
+            "to": (0, 127),
             "latDeg": (0, 90),
+            "latMin": (0, 59),
             "lonDeg": (0, 180),
+            "lonMin": (0, 59),
             "course": (0, 359),
             "speed": (0, 63),
         }
@@ -344,48 +328,20 @@ class App:
             n = int(text)
 
             if not lo <= n <= hi:
-                errors.append(
-                    f"{name}: must be between {lo} and {hi}"
-                )
-                continue
-
-            values[name] = n
-
-        # Latitude and longitude minutes
-        for name in ("latMin", "lonMin"):
-
-            text = self.entries[name].get().strip()
-
-            if not re.fullmatch(r"\d+(?:\.\d)?", text):
-                errors.append(
-                    f"{name}: enter a number with at most one decimal place"
-                )
-                continue
-
-            n = float(text)
-
-            if not 0 <= n < 60:
-                errors.append(
-                    f"{name}: must be between 0.0 and 59.9"
-                )
+                errors.append(f"{name}: must be between {lo} and {hi}")
                 continue
 
             values[name] = n
 
         # Coordinate boundary checks
-        if "latDeg" in values and "latMin" in values:
-            if values["latDeg"] == 90 and values["latMin"] != 0:
-                errors.append(
-                    "Latitude: minutes must be 0 at 90 degrees"
-                )
+        if values.get("latDeg") == 90 and values.get("latMin", 0) != 0:
+            errors.append("Latitude: minutes must be 0 at 90 degrees")
 
-        if "lonDeg" in values and "lonMin" in values:
-            if values["lonDeg"] == 180 and values["lonMin"] != 0:
-                errors.append(
-                    "Longitude: minutes must be 0 at 180 degrees"
-                )
+        if values.get("lonDeg") == 180 and values.get("lonMin", 0) != 0:
+            errors.append("Longitude: minutes must be 0 at 180 degrees")
 
-        # Direction selectors
+        # Selectors
+        values["state"] = "U" if self.state.get() == "Underway" else "A"
         values["latDir"] = self.latDir.get()
         values["lonDir"] = self.lonDir.get()
 
@@ -421,6 +377,11 @@ class App:
         ahead = enqueue(msg)
         extra = f" ({ahead} ahead of it)" if ahead else ""
         self.status.config(text=f"Queued: {msg}{extra}")
+
+def add_entry(self, row, name, column, width=12):
+        e = tk.Entry(self.root, width=width)
+        e.grid(row=row, column=column, padx=5, pady=4)
+        self.entries[name] = e
 
 
 if __name__ == "__main__":
