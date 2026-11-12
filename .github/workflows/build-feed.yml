@@ -1,4 +1,4 @@
-name: build-feed
+name: build-entry
 on:
   push:
     paths: ["companion/**"]
