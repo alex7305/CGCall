@@ -391,6 +391,7 @@ class UI_Constructor : public QMainWindow {
     void sendCQ(bool repeat = false);
     void on_cqMacroButton_toggled(bool checked);
     void on_cqMacroButton_clicked();
+    void openOpsDialog();
     void on_replyMacroButton_clicked();
     void on_snrMacroButton_clicked();
     void on_infoMacroButton_clicked();
