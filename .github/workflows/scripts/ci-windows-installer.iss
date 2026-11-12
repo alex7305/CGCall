@@ -3,6 +3,12 @@
   #define MyAppVersion "0.0.0"
 #endif
 #pragma message "AppVersion is: " + MyAppVersion
+; Repo root. Pass /DRepoRoot="$env:GITHUB_WORKSPACE" from the workflow.
+; Fallback: this script lives in .github\workflows\scripts, so go up three levels.
+#ifndef RepoRoot
+  #define RepoRoot SourcePath + "..\..\.."
+#endif
+#pragma message "RepoRoot is: " + RepoRoot
 #define MyAppPublisher "JS8Call-improved"
 #define MyAppURL "https://www.js8call.com/"
 #define MyAppExeName "JS8Call.exe"
@@ -16,7 +22,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-LicenseFile=D:\a\JS8Call-improved\JS8Call-improved\build\JS8Call\LICENSE
+LicenseFile={#RepoRoot}\build\JS8Call\LICENSE
 DefaultDirName={autopf}\{#MyAppName}
 UsePreviousAppDir=no
 ; UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -32,11 +38,11 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-OutputDir=D:\a\JS8Call-improved\JS8Call-improved\build\JS8Call
+OutputDir={#RepoRoot}\build\JS8Call
 ; This can be changed from the ci-windows.yml for release builds
 OutputBaseFilename=JS8Call-installer
-SetupIconFile=D:\a\JS8Call-improved\JS8Call-improved\icons\windows-icons\js8call.ico
-UninstallDisplayIcon=D:\a\JS8Call-improved\JS8Call-improved\icons\windows-icons\js8call.ico
+SetupIconFile={#RepoRoot}\icons\windows-icons\js8call.ico
+UninstallDisplayIcon={#RepoRoot}\icons\windows-icons\js8call.ico
 SolidCompression=yes
 ; WizardStyle introduced in 6.6.0, Github has 6.5.4
 ; WizardStyle=modern dynamic
@@ -48,9 +54,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "D:\a\JS8Call-improved\JS8Call-improved\build\JS8Call\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "D:\a\JS8Call-improved\JS8Call-improved\build\JS8Call\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "D:\a\JS8Call-improved\JS8Call-improved\icons\windows-icons\js8call.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#RepoRoot}\build\JS8Call\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#RepoRoot}\build\JS8Call\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#RepoRoot}\icons\windows-icons\js8call.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
