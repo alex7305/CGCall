@@ -1,4 +1,4 @@
-import json, os, socket, subprocess, sys, threading, time
+import json, os, shutil, socket, subprocess, sys, threading, time
 
 HOST, PORT = "127.0.0.1", 2442
 AUTO_SEND = True          # False = only fill the box; you press Send yourself
@@ -10,6 +10,10 @@ GRACE_SECONDS = 60           # how long to wait for CGCall to appear before givi
 CHECK_EVERY = 3              # seconds between checks
 # Run with --standalone (e.g. for debugging) to keep the feed alive without CGCall.
 WATCH_CGCALL = "--standalone" not in sys.argv
+# The feed also opens the input window (cgcall_entry) and closes it on exit.
+# Run with --no-entry to skip that.
+LAUNCH_ENTRY = "--no-entry" not in sys.argv
+ENTRY_NAME = "cgcall_entry"     # cgcall_entry.exe (built) or cgcall_entry.py (script)
 
 BASE = os.path.dirname(sys.executable if getattr(sys, "frozen", False)
                        else os.path.abspath(__file__))
@@ -36,6 +40,42 @@ def api(msg_type, text):
     msg = json.dumps({"type": msg_type, "value": text, "params": {}}) + "\n"
     with socket.create_connection((HOST, PORT), timeout=3) as s:
         s.sendall(msg.encode("utf-8"))
+
+
+_entry_proc = None
+
+
+def launch_entry():
+    """Open the input window: cgcall_entry.exe if present, else cgcall_entry.py."""
+    global _entry_proc
+    exe = os.path.join(BASE, ENTRY_NAME + ".exe")
+    py = os.path.join(BASE, ENTRY_NAME + ".py")
+    if os.path.exists(exe):
+        cmd = [exe]
+    elif os.path.exists(py):
+        runner = shutil.which("pythonw") or shutil.which("pyw") or shutil.which("python")
+        if not runner:
+            log("No Python found to launch cgcall_entry.py")
+            return
+        cmd = [runner, py]
+    else:
+        log(f"Could not find {ENTRY_NAME}.exe or {ENTRY_NAME}.py in {BASE}")
+        return
+    try:
+        _entry_proc = subprocess.Popen(cmd, cwd=BASE)
+        log(f"Launched input window: {os.path.basename(cmd[-1])}")
+    except OSError as e:
+        log(f"Could not launch input window ({e})")
+
+
+def shutdown():
+    """Close the input window, then exit the feed."""
+    if _entry_proc and _entry_proc.poll() is None:
+        try:
+            _entry_proc.terminate()
+        except OSError:
+            pass
+    os._exit(0)
 
 
 def cgcall_running():
@@ -65,7 +105,7 @@ def _watch_cgcall():
             misses += 1                  # require two misses in a row
             if misses >= 2:
                 log(f"{CGCALL_EXE} is not running; closing the feed.")
-                os._exit(0)
+                shutdown()
 
 
 def _listen_for_takeover(s):
@@ -77,7 +117,7 @@ def _listen_for_takeover(s):
                 c.settimeout(2)
                 if c.recv(16).strip() == b"QUIT":
                     log("Newer instance asked me to quit; exiting.")
-                    os._exit(0)
+                    shutdown()
         except OSError:
             continue
 
@@ -108,6 +148,8 @@ def main():
     lock = single_instance()           # keep this variable alive
     if WATCH_CGCALL:
         threading.Thread(target=_watch_cgcall, daemon=True).start()
+    if LAUNCH_ENTRY:
+        launch_entry()
     open(OUTBOX, "a").close()
     pos = os.path.getsize(OUTBOX)
     last_sent = 0.0
