@@ -8,6 +8,7 @@
 #include "mainwindow.h"
 
 #include "moc_mainwindow.cpp"
+#include <QProcess>
 
 static char message[29];
 static char msgsent[29];
@@ -4117,35 +4118,24 @@ void UI_Constructor::sendCQ(bool repeat) {
 }
 
 void UI_Constructor::on_cqMacroButton_toggled(bool checked) {
-    qCDebug(mainwindow_js8) << "on_cqMacroButton_toggled(" << checked << ")";
-    if (checked) {
-        clearCallsignSelected();
-
-        if (m_cqInterval) {
-            qCDebug(mainwindow_js8)
-                << "Starting CQ loop from on_cqMacroButton_toggled()";
-            m_cq_loop->onTxLoopPeriodChangeStart(m_cqInterval * (qint64)60000);
-        } else {
-            qCDebug(mainwindow_js8)
-                << "Sending single CQ from on_cqMacroButton_toggled()";
-            m_cq_loop->onLoopCancel();
-            sendCQ(false);
-
-            // make this button emulate a single press button
-            ui->cqMacroButton->setChecked(false);
-        }
-    } else {
-        if (m_cq_loop->isActive() && m_cqButtonIsLongterm) {
-            qCDebug(mainwindow_js8)
-                << "Stopping CQ loop from on_cqMacroButton_toggled()";
-            m_cq_loop->onLoopCancel();
-        }
+    if (!checked) {
+        return;
     }
-    qCDebug(mainwindow_js8)
-        << "updateCQButtonDisplay called via on_cqMacroButton_toggled";
+
+    // Make the button act like a single-press button
+    ui->cqMacroButton->setChecked(false);
+
+    // Adjust this path to where your script lives.
+    // pythonw avoids a stray console window (the script uses tkinter).
+    QString const script = "C:/development/CGCall/companion/cgcall_entry.py";
+
+    if (!QProcess::startDetached("pythonw", {script})) {
+        // fall back to python if pythonw isn't on PATH
+        QProcess::startDetached("python", {script});
+    }
+
     updateCQButtonDisplay();
 }
-
 void UI_Constructor::on_cqMacroButton_clicked() {}
 
 void UI_Constructor::on_replyMacroButton_clicked() {
