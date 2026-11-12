@@ -979,9 +979,10 @@ QTextEdit[transmitting=&quot;true&quot;] {
           </property>
           <property name="toolTip">
            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open the OPS entry window&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-           <property name="text">
-            <string>OPS</string>
-           </property>
+          </property>
+          <property name="autoFillBackground">
+           <bool>true</bool>
+          </property>
           <property name="styleSheet">
            <string notr="true">QPushButton:checked {
   font-weight:bold;
@@ -989,7 +990,7 @@ QTextEdit[transmitting=&quot;true&quot;] {
 }</string>
           </property>
           <property name="text">
-           <string>CQ</string>
+           <string>OPS</string>
           </property>
           <property name="checkable">
            <bool>true</bool>
