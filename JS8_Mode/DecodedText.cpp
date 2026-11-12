@@ -175,7 +175,7 @@ bool DecodedText::tryUnpackOps(QString const &m) {
 
     frameType_ = Varicode::FrameOps;
 
-    message_ = QStringLiteral("ID %1 | %2 %3 | CRS %4 | SPD %5 kt ")
+    message_ = QStringLiteral("USCGC %1 | %2 %3 | CRS %4 | SPD %5 kt ")
                    .arg(id, 5, 10, QChar('0'))
                    .arg(formatDmm(lat, 2, QChar('N'), QChar('S')))
                    .arg(formatDmm(lon, 3, QChar('E'), QChar('W')))
