@@ -12,7 +12,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pyinstaller
-      - run: pyinstaller --onefile --noconsole --name cgcall_feed companion/cgcall_feed.py
       - run: pyinstaller --onefile --noconsole --name cgcall_entry companion/cgcall_entry.py
       - uses: actions/upload-artifact@v4
         with:
