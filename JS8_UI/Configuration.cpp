@@ -2965,10 +2965,9 @@ bool Configuration::impl::validate() {
     }
 
     auto callsign = ui_->callsign_line_edit->text().toUpper().trimmed();
-    if (!Varicode::isValidCallsign(callsign, nullptr) ||
-        callsign.startsWith("@")) {
+    if (!QRegularExpression(R"(^\d{5}$)").match(callsign).hasMatch()) {
         JS8MessageBox::critical_message(
-            this, tr("The callsign format you provided is not supported"));
+            this, tr("Callsign must be exactly 5 digits"));
         return false;
     }
 

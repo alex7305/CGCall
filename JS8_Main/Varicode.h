@@ -174,31 +174,15 @@ class Varicode {
     static bool isCompoundCallsign(const QString &callsign);
     static bool isGroupAllowed(const QString &group);
 
-    // Ops:
-    // [3 prefix][17 id][1+17 lat][1+18 lon][9 course][6 speed] = 72
-    // lat/lon: signed tenths of an arc-minute (N/E +, S/W -)
-    // |lat| <= 54000 (90 degrees)
-    // |lon| <= 108000 (180 degrees)
-
+     // OPS: [3 prefix][17 from][7 to][1 underway][1+13 lat][1+14 lon]
+    //      [9 course][6 speed] = 72. lat/lon: signed whole minutes (N/E +).
+    static QString packOpsFrame(quint32 from, quint32 to, bool underway,
+                                int latMin, int lonMin, int course, int speed);
+    static bool unpackOpsFrame(QString const &text, quint32 *from, quint32 *to,
+                               bool *underway, int *latMin, int *lonMin,
+                               int *course, int *speed);
     static bool isOpsText(QString const &text);
-    static QString packOpsText(QString const &text);
-
-    static QString packOpsFrame(quint32 id,
-                                int latTenths,
-                                int lonTenths,
-                                int course,
-                                int speed);
-
-    static bool unpackOpsFrame(QString const &text,
-                               quint32 *id,
-                               int *latTenths,
-                               int *lonTenths,
-                               int *course,
-                               int *speed);
-
-    static int dmmToTenths(int degrees,
-                           double minutes,
-                           bool negative);
+    static QString packOpsText(QString const &text, QString const &mycall);
 
     static QString packDataMessage(QString const &text, int *n);
     static QString unpackDataMessage(QString const &text);
