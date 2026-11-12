@@ -6551,5 +6551,5 @@ QByteArray UI_Constructor::wisdomFileName() const {
         .toLocal8Bit();
 }
 
-Q_LOGGING_CATEGORY(decoder_js8, "decoder.js8", QtWarningMsg)
+
 Q_LOGGING_CATEGORY(mainwindow_js8, "mainwindow.js8", QtWarningMsg)
