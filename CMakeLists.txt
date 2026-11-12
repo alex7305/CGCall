@@ -516,15 +516,23 @@ if (WIN32)
       endif()
     endforeach()
   endif()
-  if (JS8_DLL_DIR)
+    if (JS8_DLL_DIR)
     message(STATUS "Third-party DLLs will be copied from: ${JS8_DLL_DIR}")
-    add_custom_command(
-      TARGET ${TARGET}
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_directory
-              "${JS8_DLL_DIR}" "$<TARGET_FILE_DIR:${TARGET}>"
-      COMMENT "Copying third-party DLLs..."
-    )
+
+    # Copy everything except the C++ runtime DLLs, which must be the ones
+    # windeployqt supplies (they have to match the Qt build).
+    file(GLOB JS8_THIRD_PARTY_DLLS "${JS8_DLL_DIR}/*.dll")
+    list(FILTER JS8_THIRD_PARTY_DLLS EXCLUDE REGEX "/(libc\\+\\+|libunwind)\\.dll$")
+
+    if (JS8_THIRD_PARTY_DLLS)
+      add_custom_command(
+        TARGET ${TARGET}
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${JS8_THIRD_PARTY_DLLS} "$<TARGET_FILE_DIR:${TARGET}>"
+        COMMENT "Copying third-party DLLs..."
+      )
+    endif()
   else()
     message(WARNING "JS8_DLL_DIR is not set; Hamlib/FFTW/libusb DLLs will not be copied next to the exe.")
   endif()
