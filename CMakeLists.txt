@@ -484,6 +484,9 @@ if (WIN32)
 
   target_sources(${TARGET} PRIVATE JS8_Include/js8call.rc)
 
+  # Build the Windows executable as CGCall.exe (the CMake target stays JS8Call).
+  set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME "CGCall")
+  
   # Find the windeployqt command and run it against the generated binary.
   # No --libdir/--plugindir: Qt DLLs and plugins must sit next to the exe,
   # because Windows only searches the exe's own folder for DLLs.
