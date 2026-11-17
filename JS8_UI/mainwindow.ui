@@ -1063,10 +1063,10 @@ QTextEdit[transmitting=&quot;true&quot;] {
            </size>
           </property>
           <property name="toolTip">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Reply to a CQ&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Send an ACK to the selected station&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
           <property name="text">
-           <string>REPLY</string>
+           <string>ACK</string>.
           </property>
          </widget>
         </item>
