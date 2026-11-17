@@ -14,6 +14,7 @@
 #define DECODEDTEXT_H
 
 #include "JS8.h"
+#include <JS8_Main/Varicode.h>
 
 #include <QString>
 #include <QStringList>
