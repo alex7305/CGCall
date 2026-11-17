@@ -1,73 +1,37 @@
 $ErrorActionPreference = "Stop"
-Set-Location C:\development\CGCall
 
-$objdump = "C:\Qt\Tools\llvm-mingw2217_64\bin\llvm-objdump.exe"
+$Repo  = "C:\development\CGCall"
+$Build = "$Repo\build\release"
+$Pkg   = "C:\development\CGCall-0.1"
+$Zip   = "C:\development\CGCall-0.1.zip"
+$Extra = @("$Repo\companion")      # files/folders to ship next to the exe
 
-function Check($what) {
-    if ($LASTEXITCODE -ne 0) { throw "$what failed (exit code $LASTEXITCODE)" }
+# 1. Stop any running copy so files aren't locked
+Get-Process CGCall, JS8Call -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# 2. Build (this also runs windeployqt and the DLL copy)
+cmake --build $Build
+if ($LASTEXITCODE -ne 0) { throw "Build failed" }
+
+# 3. Fresh package folder, never reuse the old one
+Remove-Item $Pkg -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item $Build $Pkg -Recurse
+foreach ($e in $Extra) { Copy-Item $e $Pkg -Recurse -Force }
+
+# 4. Strip leftovers and build junk
+Remove-Item "$Pkg\JS8Call.exe" -Force -ErrorAction SilentlyContinue
+Get-ChildItem $Pkg -Recurse -Include CMakeFiles, *.cmake, CMakeCache.txt, *.ninja, .ninja_* |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+# 5. Verify before zipping
+$exes = Get-ChildItem $Pkg -Filter *.exe
+if ($exes.Name -notcontains "CGCall.exe") { throw "CGCall.exe missing" }
+if ($exes.Name -contains "JS8Call.exe")   { throw "JS8Call.exe still present" }
+foreach ($dll in "Qt6Core","Qt6Gui","Qt6Widgets","Qt6Multimedia","Qt6SerialPort") {
+    if (-not (Test-Path "$Pkg\$dll.dll")) { throw "Missing $dll.dll" }
 }
 
-# 1. Latest code from GitHub, then a release build. CMake already places the
-#    Qt DLLs/plugins and the Hamlib/FFTW/libusb DLLs beside the exe.
-git pull;                        Check "git pull"
-cmake --preset release;          Check "cmake configure"
-cmake --build --preset release;  Check "cmake build"
-
-# 2. Sanity check: the build folder must already be self-contained
-$build = "build\release"
-foreach ($need in "JS8Call.exe", "Qt6Core.dll", "Qt6Widgets.dll", "platforms\qwindows.dll", "libhamlib-4.dll", "libfftw3f-3.dll") {
-    if (-not (Test-Path "$build\$need")) {
-        throw "$need is missing from $build. Check that JS8_DLL_DIR was found and windeployqt ran."
-    }
-}
-
-# 3. Fresh staging folder named after the commit
-$hash = git rev-parse --short HEAD
-$pkg  = "C:\development\CGCall-$hash"
-if (Test-Path $pkg) { Remove-Item -Recurse -Force $pkg }
-
-# 4. Copy the runtime files only, leaving out build-system clutter
-#    (JS8Call is the old windeployqt subfolder from earlier builds)
-robocopy $build $pkg /E `
-    /XD CMakeFiles .cmake .qt JS8Call JS8Call_autogen Testing `
-    /XF *.ninja .ninja_deps .ninja_log *.cmake CMakeCache.txt *.rsp *.a compile_commands.json js8call_config.h `
-    /NFL /NDL /NJH /NJS | Out-Null
-if ($LASTEXITCODE -ge 8) { throw "robocopy failed (exit code $LASTEXITCODE)" }
-
-# 5. Companion program, if it has been built
-if (Test-Path companion\dist) {
-    New-Item -ItemType Directory "$pkg\companion" -Force | Out-Null
-    Copy-Item companion\dist\* "$pkg\companion" -Recurse -Force
-}
-
-# 6. Dependency check: every DLL that the exe and bundled DLLs import must be
-#    in the package or in System32 (which a clean PC also has)
-if (Test-Path $objdump) {
-    $sys     = "$env:WINDIR\System32"
-    $missing = @()
-    Get-ChildItem $pkg -Recurse -Include *.exe, *.dll |
-        Where-Object { $_.FullName -notlike "*\companion\*" } |
-        ForEach-Object {
-            $self = $_.Name
-            & $objdump -p $_.FullName 2>$null | Select-String -CaseSensitive 'DLL Name:\s*(\S+)' | ForEach-Object {
-                $d = $_.Matches[0].Groups[1].Value
-                if ($d -ne $self -and
-                    $d -notmatch '^(api-ms-|ext-ms-)' -and
-                    -not (Test-Path "$pkg\$d") -and
-                    -not (Test-Path "$sys\$d")) { $missing += $d }
-            }
-        }
-    $missing = $missing | Sort-Object -Unique
-    if ($missing) {
-        throw "Missing DLLs: $($missing -join ', '). Add them to the DLL folder or the build."
-    }
-    Write-Host "Dependency check passed."
-} else {
-    Write-Warning "llvm-objdump not found; skipped dependency check. Test on another PC."
-}
-
-# 7. Zip
-$zip = "$pkg.zip"
-if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path $pkg -DestinationPath $zip
-Write-Host "Done: $zip"
+# 6. Zip
+Remove-Item $Zip -Force -ErrorAction SilentlyContinue
+Compress-Archive -Path $Pkg -DestinationPath $Zip
+Write-Host "Done: $Zip"
