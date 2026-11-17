@@ -2965,11 +2965,11 @@ bool Configuration::impl::validate() {
     }
 
     auto callsign = ui_->callsign_line_edit->text().toUpper().trimmed();
-    if (!QRegularExpression(R"(^\d{5}$)").match(callsign).hasMatch()) {
-        JS8MessageBox::critical_message(
-            this, tr("Callsign must be exactly 5 digits"));
-        return false;
-    }
+    if (!QRegularExpression(R"(^\d+$)").match(callsign).hasMatch()) {
+    QMessageBox::warning(
+        this, tr("Callsign must contain only digits"));
+    return;
+}
 
     if (!ui_->grid_line_edit->hasAcceptableInput()) {
         JS8MessageBox::critical_message(
