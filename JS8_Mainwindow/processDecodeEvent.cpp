@@ -404,7 +404,58 @@ void UI_Constructor::processDecodeEvent(JS8::Event::Variant const &event) {
                     }
                 }
 #endif
+                // CGCall: OPS reports and ACKs -> station list + inbox
+                if (decodedtext.isOps() || decodedtext.isAck()) {
+                    CommandDetail ops = {};
+                    bool deliver = false;
 
+                    QString const myId = Varicode::stationIdFromCallsign(
+                        m_config.my_callsign());
+
+                    if (decodedtext.isOps()) {
+                        ops.from = Varicode::formatStationId(false, decodedtext.opsFrom());
+                        ops.to = decodedtext.opsTo() == 0
+                                     ? QStringLiteral("ALL")
+                                     : Varicode::formatStationId(true, decodedtext.opsTo());
+                        ops.cmd = QStringLiteral("OPS");
+                        deliver = decodedtext.opsTo() == 0 || ops.to == myId ||
+                                  m_config.my_groups().contains(ops.to);
+                    } else {
+                        ops.from = decodedtext.ackFrom();
+                        ops.to = decodedtext.ackTo();
+                        ops.cmd = QStringLiteral("ACK");
+                        deliver = ops.to == myId;
+                    }
+
+                    ops.dial = freq;
+                    ops.offset = decodedtext.frequencyOffset();
+                    ops.snr = decodedtext.snr();
+                    ops.utcTimestamp = DriftingDateTime::currentDateTimeUtc();
+                    ops.bits = decodedtext.bits();
+                    ops.text = decodedtext.message().trimmed();
+                    ops.submode = decodedtext.submode();
+                    ops.tdrift = m_wideGraph->shouldAutoSyncSubmode(ops.submode)
+                                     ? DriftingDateTime::drift() / 1000.0
+                                     : decodedtext.dt();
+                    ops.relayPath = ops.from;
+
+                    // list the sender in Call Activity (this is what ACK autofills from)
+                    CallDetail opscd = {};
+                    opscd.call = ops.from;
+                    opscd.bits = ops.bits;
+                    opscd.snr = ops.snr;
+                    opscd.dial = ops.dial;
+                    opscd.offset = ops.offset;
+                    opscd.utcTimestamp = ops.utcTimestamp;
+                    opscd.tdrift = ops.tdrift;
+                    opscd.submode = ops.submode;
+                    logCallActivity(opscd, false);
+
+                    if (deliver) {
+                        addCommandToMyInbox(ops);
+                        d.shouldDisplay = true;
+                    }
+                }
             // Parse commands
             // KN4CRD K1JT ?
 #if 1
