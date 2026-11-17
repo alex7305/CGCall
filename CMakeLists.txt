@@ -363,6 +363,7 @@ target_sources(
   JS8_UI/MessageReplyDialog.cpp
   JS8_UI/MessagePanel.cpp
   JS8_UI/OpsDialog.cpp
+  JS8_UI/AckDialog.cpp
   JS8_UI/WF.cpp
   JS8_UI/WideGraph.cpp
   JS8_Widgets/CheckableItemComboBox.cpp
