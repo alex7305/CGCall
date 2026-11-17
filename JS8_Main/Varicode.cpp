@@ -1473,6 +1473,130 @@ bool Varicode::isOpsText(QString const &text) {
     return re.match(text).hasMatch();
 }
 
+
+bool Varicode::parseStationId(QString const &id, bool *isSector, quint32 *value) {
+    static QRegularExpression const cutter(R"(^\d{5}$)");
+    static QRegularExpression const sector(
+        R"(^@S(\d{1,3})$)", QRegularExpression::CaseInsensitiveOption);
+
+    auto const s = id.trimmed();
+
+    if (cutter.match(s).hasMatch()) {
+        if (isSector) *isSector = false;
+        if (value)    *value = s.toUInt();
+        return true;
+    }
+
+    auto const m = sector.match(s);
+    if (m.hasMatch() && m.captured(1).toUInt() <= 127) {
+        if (isSector) *isSector = true;
+        if (value)    *value = m.captured(1).toUInt();
+        return true;
+    }
+
+    return false;
+}
+
+QString Varicode::formatStationId(bool isSector, quint32 value) {
+    return isSector ? QStringLiteral("@S%1").arg(value, 3, 10, QChar('0'))
+                    : QStringLiteral("%1").arg(value, 5, 10, QChar('0'));
+}
+
+// 5 digits = cutter; 1-3 digits, 1..127 = sector
+QString Varicode::stationIdFromCallsign(QString const &mycall) {
+    static QRegularExpression const digits(R"(^\d+$)");
+
+    auto const s = mycall.trimmed();
+    if (!digits.match(s).hasMatch()) {
+        return QString{};
+    }
+    if (s.length() == 5) {
+        return s;
+    }
+    if (s.length() <= 3) {
+        quint32 const v = s.toUInt();
+        if (v >= 1 && v <= 127) {
+            return formatStationId(true, v);
+        }
+    }
+    return QString{};
+}
+
+QString Varicode::packAckFrame(QString const &to, QString const &from, bool over) {
+    bool toSector = false, fromSector = false;
+    quint32 toVal = 0, fromVal = 0;
+
+    if (!parseStationId(to, &toSector, &toVal) ||
+        !parseStationId(from, &fromSector, &fromVal)) {
+        return QString{};
+    }
+
+    auto const bits = Varicode::intToBits(Varicode::FrameAck, 3) +
+                      Varicode::intToBits(fromSector ? 1 : 0, 1) +
+                      Varicode::intToBits(fromVal, 17) +
+                      Varicode::intToBits(toSector ? 1 : 0, 1) +
+                      Varicode::intToBits(toVal, 17) +
+                      Varicode::intToBits(over ? 1 : 0, 1) +
+                      Varicode::intToBits(0, 32);
+
+    quint64 const value = Varicode::bitsToInt(bits.constBegin(), 64);
+    quint8 const rem = (quint8)Varicode::bitsToInt(bits.constBegin() + 64, 8);
+    return Varicode::pack72bits(value, rem);
+}
+
+bool Varicode::unpackAckFrame(QString const &text, QString *to, QString *from,
+                              bool *over) {
+    if (text.length() < 12 || text.contains(" ")) {
+        return false;
+    }
+
+    quint8 rem = 0;
+    auto const bits =
+        Varicode::intToBits(Varicode::unpack72bits(text, &rem), 64) +
+        Varicode::intToBits(rem, 8);
+
+    if (Varicode::bitsToInt(bits.mid(0, 3)) != Varicode::FrameAck) {
+        return false;
+    }
+
+    bool const fromSector = bits.at(3);
+    quint32 const fromVal = Varicode::bitsToInt(bits.mid(4, 17));
+    bool const toSector = bits.at(21);
+    quint32 const toVal = Varicode::bitsToInt(bits.mid(22, 17));
+
+    if ((fromSector ? fromVal > 127 : fromVal > 99999) ||
+        (toSector ? toVal > 127 : toVal > 99999)) {
+        return false;
+    }
+
+    if (to)   *to = formatStationId(toSector, toVal);
+    if (from) *from = formatStationId(fromSector, fromVal);
+    if (over) *over = bits.at(39);
+
+    return true;
+}
+
+bool Varicode::isAckText(QString const &text) {
+    static QRegularExpression const re(
+        R"(^\s*ACK(\s|$))", QRegularExpression::CaseInsensitiveOption);
+    return re.match(text).hasMatch();
+}
+
+QString Varicode::packAckText(QString const &text, QString const &mycall) {
+    static QRegularExpression const re(
+        R"(^\s*ACK\s+(\d{5}|@S\d{1,3})\s+(OVER|OUT)\s*$)",
+        QRegularExpression::CaseInsensitiveOption);
+
+    auto const from = stationIdFromCallsign(mycall);
+    auto const m = re.match(text);
+    if (from.isEmpty() || !m.hasMatch()) {
+        return QString{};
+    }
+
+    return packAckFrame(m.captured(1).toUpper(), from,
+                        m.captured(2).compare("OVER", Qt::CaseInsensitive) == 0);
+}
+
 QString packHuffMessage(const QString &input, const QVector<bool> prefix,
                         int *n) {
     static const int frameSize = 72;
@@ -1753,6 +1877,17 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
                                                 Varicode::JS8CallFirst |
                                                 Varicode::JS8CallLast});
             }
+
+                    // ACK template: "ACK <to> <OVER|OUT>"
+        if (Varicode::isAckText(line)) {
+            QString const ackFrame = Varicode::packAckText(line, mycall);
+            if (!ackFrame.isEmpty()) {
+                allFrames.append({ackFrame, Varicode::JS8Call |
+                                                Varicode::JS8CallFirst |
+                                                Varicode::JS8CallLast});
+            }
+            continue; // invalid ACK text sends nothing
+        }
             continue; // invalid Ops text sends nothing
         }
         QList<QPair<QString, int>> lineFrames;
