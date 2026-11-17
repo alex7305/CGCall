@@ -2971,7 +2971,7 @@ bool Configuration::impl::validate() {
         tr("Invalid Callsign"),
         tr("Callsign must be exactly 3 or 5 digits")
     );
-    return;
+    return false;
 }
 
     if (!ui_->grid_line_edit->hasAcceptableInput()) {
