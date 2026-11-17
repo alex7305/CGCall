@@ -173,6 +173,8 @@ bool DecodedText::tryUnpackOps(QString const &m) {
         return false;
 
     frameType_ = Varicode::FrameOps;
+    opsFrom_ = from;
+    opsTo_ = to;
 
     message_ =
         QStringLiteral("FROM %1 | TO %2 | %3 %4 | CRS %5 | SPD %6 kt | %7 ")
