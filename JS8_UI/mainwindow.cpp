@@ -4137,6 +4137,11 @@ void UI_Constructor::openOpsDialog() {
         return;
     }
 
+    if (!ensureCanTransmit()) {
+    JS8MessageBox::warning_message(
+        this, tr("The transmitter is disabled. Turn on TX, then try again."));
+    return;
+    }
     OpsDialog dlg(this);
     if (dlg.exec() != QDialog::Accepted) {
         return;
@@ -4164,6 +4169,11 @@ void UI_Constructor::on_replyMacroButton_clicked() {
         return;
     }
 
+        if (!ensureCanTransmit()) {
+        JS8MessageBox::warning_message(
+            this, tr("The transmitter is disabled. Turn on TX, then try again."));
+        return;
+    }
     QString const to = callsignSelected();
     QString const from =
         Varicode::stationIdFromCallsign(m_config.my_callsign());
