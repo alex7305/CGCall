@@ -43,7 +43,7 @@ class Varicode {
 
     /*
       000 = Ops/Position Report
-      001 = Weather
+      001 = ACK
       010 = Template Reserved
       011 = Template Reserved
       1XX = data, with the X lsb bits dropped
@@ -51,7 +51,7 @@ class Varicode {
     enum FrameType {
         FrameUnknown = 255,
         FrameOps = 0,
-        FrameWeather = 1,
+        FrameAck = 1,
         FrameCompoundDirected = 2,
         FrameDirected = 3,
         FrameData = 4,
@@ -63,7 +63,7 @@ class Varicode {
     static QString frameTypeString(quint8 type) {
         const char *FrameTypeStrings[] = {
             "FrameOps",
-            "FrameWeather",
+            "FrameAck",
             "FrameCompoundDirected",
             "FrameDirected",
             "FrameData",
@@ -183,6 +183,16 @@ class Varicode {
                                int *course, int *speed);
     static bool isOpsText(QString const &text);
     static QString packOpsText(QString const &text, QString const &mycall);
+
+    static bool parseStationId(QString const &id, bool *isSector, quint32 *value);
+    static QString formatStationId(bool isSector, quint32 value);
+    static QString stationIdFromCallsign(QString const &mycall);
+
+    // ACK: [3 prefix=001][1 fromSector][17 from][1 toSector][17 to][1 over][32 reserved]
+    static QString packAckFrame(QString const &to, QString const &from, bool over);
+    static bool unpackAckFrame(QString const &text, QString *to, QString *from, bool *over);
+    static bool isAckText(QString const &text);
+    static QString packAckText(QString const &text, QString const &mycall);
 
     static QString packDataMessage(QString const &text, int *n);
     static QString unpackDataMessage(QString const &text);
