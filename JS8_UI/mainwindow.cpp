@@ -8,6 +8,7 @@
 
 #include "mainwindow.h"
 #include "OpsDialog.h"
+#include "AckDialog.h"
 
 #include "moc_mainwindow.cpp"
 
@@ -4156,20 +4157,37 @@ void UI_Constructor::openOpsDialog() {
 }
 
 void UI_Constructor::on_replyMacroButton_clicked() {
-    QString call = callsignSelected();
-    if (call.isEmpty()) {
+    // The former REPLY button is now ACK. TO autofills from the station
+    // selected in Call Activity (senders of received OPS reports appear
+    // there); FROM is always this station.
+    if (!ensureCallsignSet(true)) {
         return;
     }
 
-    auto message = m_config.reply_message();
-    message = replaceMacros(message, buildMacroValues(), true);
-    addMessageText(QString("%1 %2").arg(call).arg(message));
+    QString const to = callsignSelected();
+    QString const from =
+        Varicode::stationIdFromCallsign(m_config.my_callsign());
 
-    if (m_config.transmit_directed() && ui->monitorTxButton->isChecked()) {
-        startTx();
+    if (to.isEmpty() || from.isEmpty()) {
+        return;
     }
-}
 
+    AckDialog dlg(to, from, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString const text = dlg.commandText();
+
+    if (Varicode::packAckText(text, m_config.my_callsign()).isEmpty()) {
+        JS8MessageBox::warning_message(
+            this, tr("Could not encode this ACK. Check the To field."));
+        return;
+    }
+
+    enqueueMessage(PriorityNormal, text, -1, nullptr);
+    processTxQueue();
+}
 void UI_Constructor::on_snrMacroButton_clicked() {
     QString call = callsignSelected();
     if (call.isEmpty()) {
