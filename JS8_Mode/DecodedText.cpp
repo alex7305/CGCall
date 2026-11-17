@@ -191,6 +191,27 @@ bool DecodedText::tryUnpackOps(QString const &m) {
     return true;
 }
 
+bool DecodedText::tryUnpackAck(QString const &m) {
+    if ((bits_ & Varicode::JS8CallData) == Varicode::JS8CallData)
+        return false;
+
+    QString to, from;
+    bool over = false;
+
+    if (!Varicode::unpackAckFrame(m, &to, &from, &over))
+        return false;
+
+    frameType_ = Varicode::FrameAck;
+    ackTo_ = to;
+    ackFrom_ = from;
+    ackOver_ = over;
+
+    message_ = QStringLiteral("ACK TO %1 FROM %2 %3 ")
+                   .arg(to, from,
+                        over ? QStringLiteral("OVER") : QStringLiteral("OUT"));
+
+    return true;
+}
 /******************************************************************************/
 // Public Implementation
 /******************************************************************************/
