@@ -486,6 +486,14 @@ if (WIN32)
 
   # Build the Windows executable as CGCall.exe (the CMake target stays JS8Call).
   set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME "CGCall")
+
+    # Remove any stale JS8Call.exe left over from builds before the rename.
+  add_custom_command(
+    TARGET ${TARGET}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:${TARGET}>/JS8Call.exe"
+    COMMENT "Removing stale JS8Call.exe..."
+  )
   
   # Find the windeployqt command and run it against the generated binary.
   # No --libdir/--plugindir: Qt DLLs and plugins must sit next to the exe,
