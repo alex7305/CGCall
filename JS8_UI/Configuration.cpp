@@ -2965,9 +2965,12 @@ bool Configuration::impl::validate() {
     }
 
     auto callsign = ui_->callsign_line_edit->text().toUpper().trimmed();
-    if (!QRegularExpression(R"(^\d+$)").match(callsign).hasMatch()) {
+    if (!QRegularExpression(R"(^(?:\d{3}|\d{5})$)").match(callsign).hasMatch()) {
     QMessageBox::warning(
-        this, tr("Callsign must contain only digits"));
+        this,
+        tr("Invalid Callsign"),
+        tr("Callsign must be exactly 3 or 5 digits")
+    );
     return;
 }
 
