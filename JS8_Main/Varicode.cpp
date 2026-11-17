@@ -1287,6 +1287,16 @@ bool isValidCompoundCallsign(QStringView callsign) {
 }
 
 bool Varicode::isValidCallsign(const QString &callsign, bool *pIsCompound) {
+
+    // Allow numeric station identifiers of variable length
+static const QRegularExpression numericID("^\\d+$");
+
+    if (numericID.match(callsign).hasMatch()) {
+        if (pIsCompound)
+            *pIsCompound = false;
+    
+        return true;
+    }
     if (basecalls.contains(callsign)) {
         if (pIsCompound)
             *pIsCompound = false;
