@@ -83,8 +83,17 @@ class DecodedText {
     /** True when the decoder flagged the frame as low confidence. */
     bool isLowConfidence() const { return isLowConfidence_; }
 
+    bool isOps() const { return frameType_ == Varicode::FrameOps; }
+    quint32 opsFrom() const { return opsFrom_; }
+    quint32 opsTo() const { return opsTo_; }
+
     /** True when the Frame is recogized as an ACK */
     bool isAck() const { return frameType_ == Varicode::FrameAck; }
+    QString ackTo() const { return ackTo_; }
+    quint32 opsFrom_ = 0;
+    quint32 opsTo_ = 0;
+    QString ackFrom() const { return ackFrom_; }
+    bool ackOver() const { return ackOver_; }
 
     /** Message text extracted from the frame. */
     QString message() const { return message_; }
@@ -112,10 +121,6 @@ class DecodedText {
      * @brief Return a human-readable representation of the decoded frame.
      */
     QString string() const;
-
-    QString ackTo() const { return ackTo_; }
-    QString ackFrom() const { return ackFrom_; }
-    bool ackOver() const { return ackOver_; }
 
   private:
     // Unpacking strategies, attempted in order until one succeeds.
