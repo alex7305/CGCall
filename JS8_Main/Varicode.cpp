@@ -1869,7 +1869,7 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
     QStringList lines = {text};
 
     foreach (QString line, lines) {
-        // Ops template: "Ops <id> <deg> <min> N|S <deg> <min> E|W <crs> <spd>"
+        // OPS template: "OPS <to> <U|A> <latDeg> <latMin> <N|S> <lonDeg> <lonMin> <E|W> <crs> <spd>"
         if (Varicode::isOpsText(line)) {
             QString const opsFrame = Varicode::packOpsText(line, mycall);
             if (!opsFrame.isEmpty()) {
@@ -1877,8 +1877,10 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
                                                 Varicode::JS8CallFirst |
                                                 Varicode::JS8CallLast});
             }
+            continue; // invalid OPS text sends nothing
+        }
 
-                    // ACK template: "ACK <to> <OVER|OUT>"
+        // ACK template: "ACK <to> <OVER|OUT>"
         if (Varicode::isAckText(line)) {
             QString const ackFrame = Varicode::packAckText(line, mycall);
             if (!ackFrame.isEmpty()) {
@@ -1887,8 +1889,6 @@ Varicode::buildMessageFrames(QString const &mycall, QString const &mygrid,
                                                 Varicode::JS8CallLast});
             }
             continue; // invalid ACK text sends nothing
-        }
-            continue; // invalid Ops text sends nothing
         }
         QList<QPair<QString, int>> lineFrames;
 
